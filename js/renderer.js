@@ -2721,10 +2721,13 @@ function renderExportFrame(canvas, img, settings) {
     let fgBlur = 0;
     
     // Dynamic Rack Focus Logic: Proportional across frames
-    if (S.rackFocus !== 0) {
+    let currentRack = settings.currentRack;
+    if (currentRack === undefined && S.rackFocus !== 0) {
       const rackVal = S.rackFocus / 100.0;
-      const currentRack = (settings.frameType === 'end') ? rackVal : -rackVal;
+      currentRack = (settings.frameType === 'end') ? rackVal : -rackVal;
+    }
 
+    if (currentRack !== undefined) {
       if (currentRack > 0) {
         totalBlur = Math.max(totalBlur, currentRack * 20); // Pull to FG
       } else {
@@ -2946,3 +2949,183 @@ window.updateRackFocus = function() {
   if (val > 0) text = String(val) + ' (Pull to FG)';
   document.getElementById('rackFocusValue').textContent = text;
 };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PREVIZ VIDEO ENGINE (LOCAL)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Generates a 5-second local MP4/WebM previz of the camera movement
+ */
+async function renderPrevizVideo() {
+  if (!S.heroImage || !S.backgroundPlate) {
+    showToast("Upload both subject and background first");
+    return;
+  }
+
+  const duration = 5; // seconds
+  const fps = 24;
+  const totalFrames = duration * fps;
+  
+  // Use a reasonable previz resolution (720p base)
+  const aspectData = ASPECT_RATIOS[S.aspectRatio] || ASPECT_RATIOS['16:9'];
+  let exportW, exportH;
+  if (aspectData.ratio >= 1) {
+    exportW = 1280;
+    exportH = Math.round(1280 / aspectData.ratio);
+  } else {
+    exportH = 1280;
+    exportW = Math.round(1280 * aspectData.ratio);
+  }
+
+  const captureCanvas = document.createElement('canvas');
+  captureCanvas.width = exportW;
+  captureCanvas.height = exportH;
+
+  // Use the premium render progress UI from api.js if available
+  if (window.showRenderProgress) {
+    window.showRenderProgress('LOCAL PREVIZ BAKE');
+  } else {
+    showProgress('RENDERING PREVIZ', 'Initializing Engine...', 0);
+  }
+
+  const stream = captureCanvas.captureStream(fps);
+  
+  // Detect best supported mimeType
+  const mimeTypes = [
+    'video/mp4;codecs=h264', 
+    'video/webm;codecs=vp9', 
+    'video/webm;codecs=vp8', 
+    'video/webm'
+  ];
+  const selectedMimeType = mimeTypes.find(m => MediaRecorder.isTypeSupported(m)) || 'video/webm';
+  
+  const recorder = new MediaRecorder(stream, { 
+    mimeType: selectedMimeType,
+    videoBitsPerSecond: 5000000 // 5Mbps for clear previz
+  });
+  
+  const chunks = [];
+  recorder.ondataavailable = e => {
+    if (e.data.size > 0) chunks.push(e.data);
+  };
+  
+  recorder.onstop = () => {
+    const blob = new Blob(chunks, { type: selectedMimeType });
+    const videoUrl = URL.createObjectURL(blob);
+    
+    if (window.handleRenderSuccess) {
+      window.handleRenderSuccess(videoUrl);
+    } else {
+      const win = window.open(videoUrl, '_blank');
+      if (win) win.focus();
+      hideProgress();
+    }
+  };
+
+  recorder.start();
+
+  const intensity = (S.movementIntensity) / 100;
+  const rackVal = S.rackFocus / 100.0;
+
+  // Targets for interpolation (matching exportSingleFrame logic)
+  let targetBgScale = 1.0;
+  let targetCharScale = 1.0;
+  let targetBgPanOffset = 0;
+  let targetBgTiltOffset = 0;
+  let targetDutchAngle = 0;
+  let targetSkewX = 0;
+
+  switch(S.movement) {
+    case 'Dolly Push In':
+      targetBgScale = 1.0 + (0.15 * intensity); 
+      targetCharScale = 1.0 + (0.45 * intensity);
+      break;
+    case 'Dolly Pull Out':
+      targetBgScale = 1.0 - (0.15 * intensity);
+      targetCharScale = 1.0 - (0.45 * intensity); 
+      break;
+    case 'Pan Left/Right':
+      targetBgPanOffset = 0.15 * intensity;
+      break;
+    case 'Tilt Up/Down':
+      targetBgTiltOffset = 0.12 * intensity;
+      break;
+    case 'Crane Up':
+      targetBgTiltOffset = 0.25 * intensity;
+      break;
+    case 'Zoom In':
+      targetBgScale = 1.0 + (0.40 * intensity);
+      targetCharScale = 1.0 + (0.40 * intensity);
+      break;
+    case 'Dolly Zoom':
+      targetBgScale = 1.0 + (0.60 * intensity);
+      break;
+    case 'Dutch Roll':
+      targetDutchAngle = 25 * intensity;
+      targetSkewX = 0.1 * intensity;
+      break;
+  }
+
+  if (S.angle === 'Dutch Tilt') {
+    targetDutchAngle = (targetDutchAngle || 0) + 25;
+  }
+
+  // Animation Loop
+  for (let i = 0; i < totalFrames; i++) {
+    const t = i / (totalFrames - 1);
+    
+    // Smooth stepping (Ease In Out) for more cinematic previz
+    const easeT = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+
+    const frameSettings = { 
+      ...S, 
+      frameType: t > 0.5 ? 'end' : 'start', // Keep legacy flag for minor logic
+      bgScale: 1.0 + (targetBgScale - 1.0) * easeT,
+      charScale: 1.0 + (targetCharScale - 1.0) * easeT,
+      bgPanOffset: targetBgPanOffset * easeT,
+      bgTiltOffset: targetBgTiltOffset * easeT,
+      dutchAngle: targetDutchAngle * easeT,
+      skewX: targetSkewX * easeT,
+      currentRack: -rackVal + (2 * rackVal) * easeT
+    };
+
+    // Render exact frame to capture canvas
+    renderExportFrame(captureCanvas, S.heroImage, frameSettings);
+    
+    // Update UI Progress
+    const progressPercent = Math.round((i / totalFrames) * 100);
+    if (window.updateRenderProgressUI) {
+      window.updateRenderProgressUI('LOCAL PREVIZ', i/fps, i);
+      const statusLbl = document.getElementById('renderProgressStatus');
+      if (statusLbl) statusLbl.textContent = `BAKING PREVIZ... ${progressPercent}%`;
+    } else {
+      updateProgress(`Baking frame ${i+1}/${totalFrames}`, progressPercent);
+    }
+
+    // Yield to browser frequently to ensure MediaRecorder picks up the frame
+    // and the UI stays responsive
+    await new Promise(r => requestAnimationFrame(r));
+  }
+
+  // Allow a tiny bit of time for the last frame to be sampled
+  await new Promise(r => setTimeout(r, 100));
+  recorder.stop();
+}
+
+/**
+ * Utility to map DOF strings to numeric blur radius
+ */
+function getBlurAmount(dof) {
+  const blurs = {
+    'f/1.4 Razor Thin': 24,
+    'f/2.0 Shallow': 16,
+    'f/2.8 Cinematic': 10,
+    'f/4.0 Balanced': 6,
+    'f/5.6 Deep': 3,
+    'f/8.0 Sharp': 0.5,
+    'f/11 Deep Focus': 0
+  };
+  return blurs[dof] || 0;
+}
+
