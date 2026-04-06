@@ -2038,7 +2038,15 @@ function applyLightingOverlay(ctx, w, h, lightingType, intensity = 50) {
  * Model Selection Engine (Production Gate)
  */
 function selectModel(model) {
+  console.log(`🎯 A-CAM: Engine Switched to ${model}`);
   S.targetModel = model;
+  
+  // Update the UI "Output Info" label if it exists
+  const targetLabel = document.getElementById('outputTarget');
+  if (targetLabel) {
+    targetLabel.textContent = `${model} ${model === 'Veo' ? '2' : model === 'Kling' ? '1.6' : ''}`;
+  }
+  
   renderModelBadges();
   generatePrompt();
   showToast(`Producing with ${model}`);

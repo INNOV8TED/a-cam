@@ -11,7 +11,8 @@ const MODELS = {
  * THE RENDER EXPORT ENGINE
  * Packages prompt, camera math, and optics into the Fal.ai JSON payload
  */
-async function renderToFal(engineName) {
+window.renderToFal = async function(engineName) {
+    console.log(`🎬 A-CAM: Initiating Production for ${engineName}...`);
     const model = MODELS[engineName];
     if (!model || !model.endpoint) {
         showToast("Error: Unknown Engine");
@@ -49,7 +50,6 @@ async function renderToFal(engineName) {
     const location = document.getElementById('sceneDescInput')?.value || "Cinematic setting";
     
     // 🧬 Identity Awareness
-    // We check both the user-facing text and the raw analysis results for gender markers
     const rawAnalysis = S.outfitDetails?.description || S.outfitDetails?.outfit || "";
     const genderPool = (outfit + " " + rawAnalysis).toLowerCase();
     const isFemale = genderPool.includes("female") || genderPool.includes("woman") || genderPool.includes("girl") || genderPool.includes("lady") || genderPool.includes("actress") || genderPool.includes("heroine");
@@ -63,9 +63,7 @@ async function renderToFal(engineName) {
     const negPrompt = "camera equipment, tripod, studio gear, lens glass, DSLR body, low resolution, distorted faces, bad anatomy, gear parts";
     const cameraMath = getCameraMath(S.movement, S.movementIntensity);
     
-    // Log the enriched prompt for debugging
     console.log("🎯 DYNAMIC MASTER PROMPT:", finalPrompt);
-
 
     // 3. UI LOADING OVERLAY
     showRenderProgress(engineName);
@@ -114,7 +112,7 @@ async function renderToFal(engineName) {
         hideRenderProgress();
         if (err.message.includes("Unauthorized")) localStorage.removeItem('FAL_KEY');
     }
-}
+};
 
 /**
  * High-fidelity Polling & Progress Updates
@@ -124,7 +122,6 @@ async function pollFalStatus(engineName, requestId, falKey) {
     let attempts = 0;
     const maxAttempts = 120; // 10 minutes
 
-    // 🔥 Start UI immediately to avoid 'INITIALIZING' freeze
     updateRenderProgressUI(engineName, 0, 0);
 
     while (attempts < maxAttempts) {
@@ -154,18 +151,16 @@ async function pollFalStatus(engineName, requestId, falKey) {
             console.warn("Polling glitch:", e);
         }
 
-        await new Promise(r => setTimeout(r, 4000)); // Poll every 4 seconds
+        await new Promise(r => setTimeout(r, 4000));
     }
     throw new Error("Render timed out (10 min)");
 }
 
 function showRenderProgress(engineName) {
-    // 🗑️ Cleanup any old ones
     document.getElementById('renderProgressOverlay')?.remove();
 
     const overlay = document.createElement('div');
     overlay.id = 'renderProgressOverlay';
-    overlay.style.willChange = 'transform, opacity'; 
     overlay.innerHTML = `
         <div class="render-progress-box">
             <div class="render-progress-title">CINEMATIC BAKE: ${engineName.toUpperCase()}</div>
@@ -184,8 +179,7 @@ function updateRenderProgressUI(engineName, elapsed, attempts) {
     const status = document.getElementById('renderProgressStatus');
     const time = document.getElementById('renderProgressTime');
     
-    // Average render times (Kling: 60s, Runway: 50s, Veo: 40s)
-    const expectedTimes = { 'Kling': 66, 'Runway': 54, 'Veo': 42 };
+    const expectedTimes = { 'Kling': 66, 'Luma': 54, 'Veo': 42 };
     const maxTime = expectedTimes[engineName] || 60;
     
     const progress = Math.min((elapsed / maxTime) * 100, 98);
@@ -196,17 +190,13 @@ function updateRenderProgressUI(engineName, elapsed, attempts) {
     
     const mins = Math.floor(elapsed / 60);
     const secs = elapsed % 60;
-    const etaMins = Math.floor(eta / 60);
-    const etaSecs = eta % 60;
 
     if (time) {
         time.innerHTML = `
             <div style="color: #666; margin-bottom: 2px;">${mins}:${secs.toString().padStart(2, '0')} ELAPSED</div>
-            <div style="color: var(--accent); font-weight: 900; letter-spacing: 1px;">ETA: ~${etaSecs}s REMAINING</div>
+            <div style="color: var(--accent); font-weight: 900; letter-spacing: 1px;">ETA: ~${eta}s REMAINING</div>
         `;
     }
-    
-    // 🔥 REPAINT BOOSTER: Force browser to redraw
     void bar?.offsetWidth; 
 }
 
@@ -222,16 +212,10 @@ function handleRenderSuccess(videoUrl) {
         video.src = videoUrl;
         download.href = videoUrl;
         download.setAttribute('target', '_blank');
-        download.setAttribute('rel', 'noopener noreferrer');
-        
         overlay.classList.add('active');
-        
-        // 🔥 REPAINT BOOSTER: Force browser to show the result
         void overlay.offsetWidth; 
     } else {
-        // Fallback
-        const win = window.open(videoUrl, '_blank');
-        if (win) win.focus();
+        window.open(videoUrl, '_blank');
     }
 }
 
@@ -249,13 +233,9 @@ function hideRenderProgress() {
     document.getElementById('renderProgressOverlay')?.remove();
 }
 
-/**
- * Maps Director's Moves to numeric camera math
- */
 function getCameraMath(movement, intensity) {
-    const val = (intensity - 50) / 50; // Map 0-100 to -1.0 to 1.0
+    const val = (intensity - 50) / 50;
     const math = { pan: 0, tilt: 0, zoom: 0, roll: 0 };
-
     switch(movement) {
         case 'Pan Left/Right': math.pan = val; break;
         case 'Tilt Up/Down': math.tilt = val; break;
@@ -267,30 +247,27 @@ function getCameraMath(movement, intensity) {
     return math;
 }
 
-async function pushToProduction() {
-    // Delegate to the currently selected model
+window.pushToProduction = async function() {
+    console.log("🚀 PUNCH TO PRODUCTION: Signal Received!");
     if (S.targetModel) {
-        renderToFal(S.targetModel);
+        window.renderToFal(S.targetModel);
     } else {
-        showToast("Please select a render engine first (Kling, Runway, or Veo)");
+        showToast("Please select a render engine first (Kling, Luma, or Veo)");
     }
-}
+};
 
-// Helper to clear any stored keys
-function clearApiKeys() {
+window.clearApiKeys = function() {
     localStorage.removeItem('FAL_KEY');
     showToast("API keys cleared");
-}
-
+};
 
 // ═══════════════════════════════════════════════════════════════════════════
 // POSE SETUP
 // ═══════════════════════════════════════════════════════════════════════════
 window.generateActionStandIn = async function() {
-    console.log("▶ A-CAM: Button Signal Received!");
-    
-    const action = document.getElementById('subjectAction').value;
-    const outfit = document.getElementById('subjectOutfit').value;
+    console.log("▶ A-CAM: Action Pose Signal Received!");
+    const action = document.getElementById('subjectAction')?.value;
+    const outfit = document.getElementById('subjectOutfit')?.value;
     const baseImage = S.characterImage;
 
     if (!baseImage) {
@@ -298,24 +275,17 @@ window.generateActionStandIn = async function() {
         return;
     }
 
-    // 🔥 START: Show the progress bar (estimating 16 seconds for the AI bake)
     startAIProgress(16);
     showToast("Generating Action Pose...");
 
     try {
-        // Build request with optional high-res face reference
-        // IMPORTANT: Emphasize outfit to prevent Flux from hallucinating different clothes
         const requestBody = {
-            prompt: `Full body shot of character ${action}. MUST BE WEARING EXACT OUTFIT: ${outfit}. The clothing must match exactly - do not change or modify the outfit. Solid white background, high contrast, professional photography`,
+            prompt: `Full body shot of character ${action}. MUST BE WEARING EXACT OUTFIT: ${outfit}. Solid white background, professional photography`,
             reference_image_url: baseImage
         };
         
-        // If we have a high-res face close-up, send it for better face identity
         if (S.faceCloseup) {
             requestBody.face_reference_url = S.faceCloseup;
-            console.log("🎯 Using high-res face close-up for identity lock");
-        } else {
-            console.log("ℹ️ No face close-up - using character sheet for identity");
         }
         
         const response = await fetch("/api/generate-pose", {
@@ -324,56 +294,34 @@ window.generateActionStandIn = async function() {
             body: JSON.stringify(requestBody)
         });
 
-        // 🔥 Check if response is actually JSON to avoid "Unexpected token A" errors
         const contentType = response.headers.get("content-type");
         if (!response.ok || !contentType || !contentType.includes("application/json")) {
-            const text = await response.text();
-            console.error("Server returned non-JSON:", text);
             throw new Error("Server Timeout or Configuration Error");
         }
 
         const data = await response.json();
-        
-        // 🔥 FINISH: Complete the progress
         completeAIProgress();
 
         if (data.images && data.images[0]) {
             updateCharacterWithNewPose(data.images[0].url);
         }
-
     } catch (error) {
-        // 🔥 ERROR: Hide the bar so the UI doesn't stay stuck
         completeAIProgress();
-        console.error("❌ A-CAM Error:", error);
         showToast("Bake failed: " + error.message);
     }
 };
 
-// Helper to handle the returned image
 function updateCharacterWithNewPose(imageUrl) {
-    console.log("🎨 A-CAM: Updating Viewfinder with new AI Pose...");
-
-    // 1. Update the Main Image in the UI
     const heroImg = document.getElementById('heroImage');
-    if (heroImg) {
-        heroImg.src = imageUrl;
-    }
+    if (heroImg) heroImg.src = imageUrl;
 
-    // 2. IMPORTANT: Update the State so the 2.5D Engine sees the new pose
-    // We create a new image object so the canvas can draw it
     const newImg = new Image();
-    newImg.crossOrigin = "anonymous"; // Prevents security errors with AI URLs
+    newImg.crossOrigin = "anonymous";
     newImg.onload = function() {
         S.heroImage = newImg;
-        
-        // 3. Trigger a redraw of the Viewfinder
-        renderStoryboard();
-        renderFrames();
-        
+        if (typeof renderStoryboard === 'function') renderStoryboard();
+        if (typeof renderFrames === 'function') renderFrames();
         showToast("Action Pose Integrated!");
-        
-        // 🔥 REPAINT BOOSTER: Force browser to redraw
-        void newImg.offsetWidth;
     };
     newImg.src = imageUrl;
 }
