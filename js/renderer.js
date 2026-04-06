@@ -1860,9 +1860,9 @@ function drawCharacterWithShadow(ctx, img, x, y, width, height, timeOfDay, light
     // 1. Calculate Proportional Shadow Physics
     // We use a percentage of the character's height so it scales perfectly for high-res export.
     let shadowBlur = height * 0.04;    // 4% of height for standard soft shadow
-    let shadowOffset = height * 0.05;  // 🔥 NEW: 5% of height - Lowered for tight foot anchoring
+    let shadowOffset = height * 0.12;  // 12% of height - Tucked under feet
     let shadowOpacity = 0.7; 
-    let horizontalNudge = width * -0.05; // 🔥 NEW: Negative shift (Left) for better grounding
+    let horizontalNudge = 0; // Reset to 0 for balanced grounding
     let lightAngle = 0;   
     let shadowLength = 0; 
     
