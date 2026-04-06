@@ -1856,13 +1856,59 @@ function getEnvironmentFilter(timeOfDay, isIndoor, baseBlur) {
     return filterStr.trim() === '' ? 'none' : filterStr;
 }
 
+function getFeetAnchor(canvas) {
+    if (!canvas) return null;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const w = canvas.width;
+    const h = canvas.height;
+    
+    // Only scan the bottom 40% of the image to save performance
+    const scanStart = Math.floor(h * 0.6);
+    const imageData = ctx.getImageData(0, scanStart, w, h - scanStart);
+    const data = imageData.data;
+    
+    let lowestY = 0;
+    let sumX = 0;
+    let count = 0;
+    
+    // Scan from bottom to top
+    for (let y = h - scanStart - 1; y >= 0; y--) {
+        let rowSumX = 0;
+        let rowCount = 0;
+        
+        for (let x = 0; x < w; x++) {
+            const alpha = data[(y * w + x) * 4 + 3];
+            if (alpha > 80) { // Threshold for solid pixel
+                rowSumX += x;
+                rowCount++;
+            }
+        }
+        
+        // If we find a row with enough pixels, it's likely the feet/ground contact
+        if (rowCount > (w * 0.02)) { // At least 2% of width
+            lowestY = y + scanStart;
+            sumX = rowSumX;
+            count = rowCount;
+            break; // Found the bottom-most solid row
+        }
+    }
+    
+    if (count > 0) {
+        return { x: sumX / count, y: lowestY };
+    }
+    return { x: w / 2, y: h * 0.92 }; // Fallback
+}
+
 function drawCharacterWithShadow(ctx, img, x, y, width, height, timeOfDay, lightingStyle = '', sunDirection = 'east') {
-    // 1. Calculate Proportional Shadow Physics
-    // We use a percentage of the character's height so it scales perfectly for high-res export.
-    let shadowBlur = height * 0.04;    // 4% of height for standard soft shadow
-    let shadowOffset = height * 0.12;  // 12% of height - Tucked under feet
+    // 1. DYNAMIC FOOT ANCHORING
+    // Programmatically detect the feet to account for unpredictable padding in AI images
+    const anchor = getFeetAnchor(img);
+    const footX = anchor ? anchor.x : width / 2;
+    const footY = anchor ? anchor.y : height * 0.92;
+    
+    // 2. Calculate Proportional Shadow Physics
+    let shadowBlur = height * 0.04; 
     let shadowOpacity = 0.7; 
-    let horizontalNudge = 0; // Reset to 0 for balanced grounding
     let lightAngle = 0;   
     let shadowLength = 0; 
     
@@ -1884,21 +1930,15 @@ function drawCharacterWithShadow(ctx, img, x, y, width, height, timeOfDay, light
         charFilter = 'brightness(0.55) contrast(1.1) saturate(0.5)'; 
     }
 
-    // --- ATMOSPHERIC CONDITIONS LOGIC (Proportional Updates) ---
+    // --- LIGHTING STYLE OVERRIDES ---
     if (lightingStyle.includes('Hard Shadow') || lightingStyle.includes('Noir')) {
         shadowOpacity = Math.min(1.0, shadowOpacity + 0.3); 
-        shadowBlur = height * 0.01; // 1% for a crisp noir shadow
+        shadowBlur = height * 0.01;
         charFilter += ' grayscale(0.6) contrast(1.4)';
     } else if (lightingStyle.includes('Soft Diffused')) {
         shadowOpacity = Math.max(0.2, shadowOpacity - 0.2); 
-        shadowBlur = height * 0.08; // 8% for a very soft, cloudy shadow
+        shadowBlur = height * 0.08;
         charFilter += ' contrast(0.9) brightness(1.1)';
-    } else if (lightingStyle.includes('Studio Key')) {
-        lightAngle = -0.5; 
-        shadowLength = 0.5;
-        shadowOpacity = 0.85;
-        shadowBlur = height * 0.03;
-        charFilter += ' contrast(1.1)';
     } else if (lightingStyle.includes('Backlit')) {
         lightAngle = 0;
         shadowLength = 1.2; 
@@ -1909,18 +1949,19 @@ function drawCharacterWithShadow(ctx, img, x, y, width, height, timeOfDay, light
     const skewX = lightAngle * -1.2; 
     const scaleY = -0.15 - (shadowLength * 0.85); 
 
-    // 2. THE DIRECTIONAL CAST SHADOW
+    // 3. THE DIRECTIONAL CAST SHADOW
     ctx.save();
-    // FIX: Using proportional shadowOffset + horizontalNudge for anchoring
-    ctx.translate(x + width / 2 + horizontalNudge, y + height - shadowOffset);
+    // Translation point is the exact detected center of the feet
+    // Since skew/scale happen around the translation origin, the shadow base stays locked to the feet.
+    ctx.translate(x + footX, y + footY);
     ctx.transform(1, 0, skewX, scaleY, 0, 0);
     
-    // FIX: Using proportional shadowBlur for consistent fuzzy edges at 4K
     ctx.filter = `brightness(0) blur(${shadowBlur}px) opacity(${shadowOpacity})`;
-    ctx.drawImage(img, -width / 2, -height, width, height);
+    // Shift image drawing so our anchor point is (0,0) during rotation/skew
+    ctx.drawImage(img, -footX, -footY, width, height);
     ctx.restore();
     
-    // 3. DRAW THE BASE CHARACTER
+    // 4. DRAW THE BASE CHARACTER
     ctx.save();
     ctx.filter = charFilter;
     ctx.drawImage(img, x, y, width, height);
