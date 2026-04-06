@@ -250,9 +250,9 @@ const RESOLUTIONS = {
 };
 
 const MODELS = {
-  'Kling': 'fal-ai/kling-video/v1/standard/text-to-video',
-  'Runway': 'fal-ai/runway-gen3/text-to-video',
-  'Veo': 'fal-ai/veo-video/v1/text-to-video'
+  'Kling': { endpoint: 'fal-ai/kling-video/v1/standard/text-to-video', tags: ['kling ai', 'realistic movement', 'high fidelity'] },
+  'Runway': { endpoint: 'fal-ai/runway-gen3/text-to-video', tags: ['runway gen-3', 'physics-based motion', '4k texture'] },
+  'Veo': { endpoint: 'fal-ai/veo-video/v1/text-to-video', tags: ['google veo 3.1', 'deepmind video', 'naturalistic lighting'] }
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -2929,7 +2929,7 @@ window.updateRackFocus = function() {
   S.rackFocus = parseInt(document.getElementById('rackFocusSlider').value);
   const val = S.rackFocus;
   let text = '0 (Static)';
-  if (val < 0) text = String(abs(val)) + ' (Pull to BG)';
+  if (val < 0) text = String(Math.abs(val)) + ' (Pull to BG)';
   if (val > 0) text = String(val) + ' (Pull to FG)';
   document.getElementById('rackFocusValue').textContent = text;
 };

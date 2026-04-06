@@ -5,11 +5,12 @@
  * Packages prompt, camera math, and optics into the Fal.ai JSON payload
  */
 async function renderToFal(engineName) {
-    const modelEndpoint = MODELS[engineName];
-    if (!modelEndpoint) {
+    const model = MODELS[engineName];
+    if (!model || !model.endpoint) {
         showToast("Error: Unknown Engine");
         return;
     }
+    const modelEndpoint = model.endpoint;
 
     // 1. AUTHENTICATION
     let falKey = localStorage.getItem('FAL_KEY');
