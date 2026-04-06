@@ -626,6 +626,24 @@
     </div>
   </div>
 
+  <!-- PRODUCTION RESULT OVERLAY -->
+  <div id="productionResultOverlay" class="result-overlay">
+    <div class="result-box">
+      <div class="result-header">
+        <span class="result-badge">FINAL BAKE</span>
+        <button onclick="closeResultOverlay()" class="result-close">&times;</button>
+      </div>
+      <div class="result-video-container">
+        <video id="resultVideo" controls autoplay playsinline loop></video>
+      </div>
+      <div class="result-actions">
+        <a id="downloadBtn" href="#" download="a-cam-render.mp4" class="download-btn">
+          <span class="icon">💾</span> DOWNLOAD VIDEO
+        </a>
+      </div>
+    </div>
+  </div>
+
   <div id="charHelpModal" class="modal-overlay">
     <div class="modal-content">
       <div class="modal-header">

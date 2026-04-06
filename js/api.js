@@ -167,8 +167,30 @@ function updateRenderProgressUI(engineName, elapsed, attempts) {
 function handleRenderSuccess(videoUrl) {
     hideRenderProgress();
     showToast("✓ RENDER COMPLETE!");
-    window.open(videoUrl, '_blank');
+    
+    const overlay = document.getElementById('productionResultOverlay');
+    const video = document.getElementById('resultVideo');
+    const download = document.getElementById('downloadBtn');
+    
+    if (overlay && video && download) {
+        video.src = videoUrl;
+        download.href = videoUrl;
+        overlay.classList.add('active');
+    } else {
+        // Fallback
+        window.open(videoUrl, '_blank');
+    }
 }
+
+window.closeResultOverlay = function() {
+    const overlay = document.getElementById('productionResultOverlay');
+    const video = document.getElementById('resultVideo');
+    if (overlay) overlay.classList.remove('active');
+    if (video) {
+        video.pause();
+        video.src = "";
+    }
+};
 
 function hideRenderProgress() {
     document.getElementById('renderProgressOverlay')?.remove();
