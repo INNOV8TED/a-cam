@@ -249,11 +249,7 @@ const RESOLUTIONS = {
   '4K': { width: 3840, height: 2160, label: '4K UHD' }
 };
 
-const MODELS = {
-  'Kling': { endpoint: 'fal-ai/kling-video/v1/standard/text-to-video', tags: ['kling ai', 'realistic movement', 'high fidelity'] },
-  'Runway': { endpoint: 'fal-ai/runway-gen3/text-to-video', tags: ['runway gen-3', 'physics-based motion', '4k texture'] },
-  'Veo': { endpoint: 'fal-ai/veo-video/v1/text-to-video', tags: ['google veo 3.1', 'deepmind video', 'naturalistic lighting'] }
-};
+// Director config is managed in api.js
 
 // ═══════════════════════════════════════════════════════════════════════════
 // DIRECTOR PRESETS — Iconic Camera Moves
@@ -1107,6 +1103,11 @@ async function analyzeAndOutpaint() {
         cinematographyContext: S.sceneDescription || 'cinematic environment'
       })
     });
+    
+    if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(errText || "AI Analysis Failed");
+    }
     
     updateProgress('Processing AI response...', 70);
     const result = await response.json();
