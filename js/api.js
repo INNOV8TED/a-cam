@@ -155,13 +155,27 @@ function updateRenderProgressUI(engineName, elapsed, attempts) {
     const status = document.getElementById('renderProgressStatus');
     const time = document.getElementById('renderProgressTime');
     
-    const progress = Math.min(5 + (attempts * 1.5), 98);
+    // Average render times (Kling: 60s, Runway: 50s, Veo: 40s)
+    const expectedTimes = { 'Kling': 66, 'Runway': 54, 'Veo': 42 };
+    const maxTime = expectedTimes[engineName] || 60;
+    
+    const progress = Math.min((elapsed / maxTime) * 100, 98);
+    const eta = Math.max(maxTime - elapsed, 1);
+    
     if (bar) bar.style.width = `${progress}%`;
-    if (status) status.textContent = `GENERATING FRAMES... (${Math.round(progress)}%)`;
+    if (status) status.textContent = `BAKING CINEMATOGRAPHY... ${Math.round(progress)}%`;
     
     const mins = Math.floor(elapsed / 60);
     const secs = elapsed % 60;
-    if (time) time.textContent = `${mins}:${secs.toString().padStart(2, '0')} ELAPSED`;
+    const etaMins = Math.floor(eta / 60);
+    const etaSecs = eta % 60;
+
+    if (time) {
+        time.innerHTML = `
+            <div style="color: #666; margin-bottom: 2px;">${mins}:${secs.toString().padStart(2, '0')} ELAPSED</div>
+            <div style="color: var(--accent); font-weight: 900; letter-spacing: 1px;">ETA: ~${etaSecs}s REMAINING</div>
+        `;
+    }
 }
 
 function handleRenderSuccess(videoUrl) {
@@ -175,10 +189,13 @@ function handleRenderSuccess(videoUrl) {
     if (overlay && video && download) {
         video.src = videoUrl;
         download.href = videoUrl;
+        download.setAttribute('target', '_blank');
+        download.setAttribute('rel', 'noopener noreferrer');
         overlay.classList.add('active');
     } else {
         // Fallback
-        window.open(videoUrl, '_blank');
+        const win = window.open(videoUrl, '_blank');
+        if (win) win.focus();
     }
 }
 
