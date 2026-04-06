@@ -283,8 +283,6 @@ function applyEffect(canvas, img, variation = {}) {
     const timeFilter = getEnvironmentFilter(settings.timeOfDay ?? S.timeOfDay, settings.isIndoor ?? S.isIndoor, 0);
     
     drawBackgroundWithSimpleDOF(ctx, S.backgroundPlate, bgX, bgY, finalBgW, finalBgH, focusPlaneY, totalBlur, timeFilter, settings.dutchAngle || 0);
-    
-    ctx.restore();
 
     // 5. CHARACTER LAYER (The Actor)
     const finalCharW = charW * charScaleMult;

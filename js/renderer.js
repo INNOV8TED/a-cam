@@ -2594,7 +2594,6 @@ function renderExportFrame(canvas, img, settings) {
     const bgY = adjustedFeetY - bgGroundY + moveY + angleShiftY;
     
     ctx.drawImage(S.backgroundPlate, bgX, bgY, scaledBgW, scaledBgH);
-    ctx.restore(); 
   }
 
   const finalCharW = charW * charZoomScale;
