@@ -2034,6 +2034,30 @@ function applyLightingOverlay(ctx, w, h, lightingType, intensity = 50) {
   ctx.restore();
 }
 
+/**
+ * Model Selection Engine (Production Gate)
+ */
+function selectModel(model) {
+  S.targetModel = model;
+  renderModelBadges();
+  generatePrompt();
+  showToast(`Producing with ${model}`);
+}
+
+function renderModelBadges() {
+  const container = document.getElementById('modelBadges');
+  if (!container) return;
+  
+  // Use the models defined in api.js (exported implicitly or accessed via global)
+  const availableModels = Object.keys(MODELS);
+  
+  container.innerHTML = availableModels.map(m => `
+    <div class="model-badge ${S.targetModel === m ? 'active' : ''}" onclick="selectModel('${m}')">
+      ${m}
+    </div>
+  `).join('');
+}
+
 function handleMasterUpload(e) {
     const file = e.target.files[0];
     if (!file) return;

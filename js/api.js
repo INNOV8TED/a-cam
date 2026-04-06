@@ -2,8 +2,9 @@
 
 const MODELS = {
     'Kling': { endpoint: 'fal-ai/kling-video/v1.6/standard/image-to-video' },
-    'Runway': { endpoint: 'fal-ai/runway-gen3/turbo/image-to-video' },
-    'Veo': { endpoint: 'fal-ai/veo/video' }
+    'Luma': { endpoint: 'fal-ai/luma-dream-machine/image-to-video' },
+    'Veo': { endpoint: 'fal-ai/google/veo-2' },
+    'Minimax': { endpoint: 'fal-ai/minimax/video/v1/image-to-video' }
 };
 
 /**
