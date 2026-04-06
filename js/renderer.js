@@ -2823,7 +2823,11 @@ function renderExportFrame(canvas, img, settings) {
     charCanvas.height = Math.ceil(finalCharH);
     const charCtx = charCanvas.getContext('2d', { willReadFrequently: true });
     charCtx.drawImage(img, 0, 0, finalCharW, finalCharH);
-    removeStudioBackground(charCtx, charCanvas);
+    
+    // 🔥 OPTIMIZATION: Skip background removal if already processed (for video loops)
+    if (!settings.skipBackgroundRemoval) {
+        removeStudioBackground(charCtx, charCanvas);
+    }
     
     // Parallax logic synced with Preview (1.4x X, 1.0x Y)
     const finalCharX = feetX - (finalCharW / 2) + (moveX * 1.4);
@@ -3018,8 +3022,8 @@ async function renderPrevizVideo() {
     return;
   }
 
-  const duration = 5; // seconds
-  const fps = 24;
+  const duration = 5; // Absolute 5 seconds
+  const fps = 30; // Solid 30 FPS
   const totalFrames = duration * fps;
   
   // Use a reasonable previz resolution (720p base)
@@ -3057,7 +3061,7 @@ async function renderPrevizVideo() {
   
   const recorder = new MediaRecorder(stream, { 
     mimeType: selectedMimeType,
-    videoBitsPerSecond: 5000000 // 5Mbps for clear previz
+    videoBitsPerSecond: 8000000 // 8Mbps for silkier previz
   });
   
   const chunks = [];
@@ -3077,6 +3081,15 @@ async function renderPrevizVideo() {
       hideProgress();
     }
   };
+
+  // 🔥 PRO-OPTIMIZATION: Pre-process the character background removal ONCE
+  // This prevents running the pixel loop 150 times, which is what caused the lag/duration bug.
+  const processedCharCanvas = document.createElement('canvas');
+  processedCharCanvas.width = S.heroImage.width;
+  processedCharCanvas.height = S.heroImage.height;
+  const pctx = processedCharCanvas.getContext('2d', { willReadFrequently: true });
+  pctx.drawImage(S.heroImage, 0, 0);
+  removeStudioBackground(pctx, processedCharCanvas);
 
   recorder.start();
 
@@ -3133,27 +3146,33 @@ async function renderPrevizVideo() {
     // Smooth stepping (Ease In Out) for more cinematic previz
     const easeT = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 
+    // Render exact frame to capture canvas (using our pre-processed char)
     const frameSettings = { 
       ...S, 
-      frameType: t > 0.5 ? 'end' : 'start', // Keep legacy flag for minor logic
+      frameType: t > 0.5 ? 'end' : 'start', 
       bgScale: 1.0 + (targetBgScale - 1.0) * easeT,
       charScale: 1.0 + (targetCharScale - 1.0) * easeT,
       bgPanOffset: targetBgPanOffset * easeT,
       bgTiltOffset: targetBgTiltOffset * easeT,
       dutchAngle: targetDutchAngle * easeT,
       skewX: targetSkewX * easeT,
-      currentRack: -rackVal + (2 * rackVal) * easeT
+      currentRack: -rackVal + (2 * rackVal) * easeT,
+      skipBackgroundRemoval: true // ⚡ SPEED BOOST: We already did this!
     };
 
     // Render exact frame to capture canvas
-    renderExportFrame(captureCanvas, S.heroImage, frameSettings);
+    renderExportFrame(captureCanvas, processedCharCanvas, frameSettings);
     
-    // Update UI Progress
-    const progressPercent = Math.round((i / totalFrames) * 100);
+    // Update UI Progress - 🔥 FIX: Use (i+1) for proportional 100% completion
+    const progressPercent = Math.min(100, Math.floor(((i + 1) / totalFrames) * 100));
+    
     if (window.updateRenderProgressUI) {
+      // Pass pre-baked progress to the UI engine
       window.updateRenderProgressUI('LOCAL PREVIZ', i/fps, i);
       const statusLbl = document.getElementById('renderProgressStatus');
+      const bar = document.getElementById('renderProgressBar');
       if (statusLbl) statusLbl.textContent = `BAKING PREVIZ... ${progressPercent}%`;
+      if (bar) bar.style.width = `${progressPercent}%`;
     } else {
       updateProgress(`Baking frame ${i+1}/${totalFrames}`, progressPercent);
     }
