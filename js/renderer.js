@@ -3026,15 +3026,15 @@ async function renderPrevizVideo() {
   const fps = 30; // Solid 30 FPS
   const totalFrames = duration * fps;
   
-  // Use a reasonable previz resolution (720p base)
+  // Use a reasonable previz resolution (800px base for speed)
   const aspectData = ASPECT_RATIOS[S.aspectRatio] || ASPECT_RATIOS['16:9'];
   let exportW, exportH;
   if (aspectData.ratio >= 1) {
-    exportW = 1280;
-    exportH = Math.round(1280 / aspectData.ratio);
+    exportW = 800;
+    exportH = Math.round(800 / aspectData.ratio);
   } else {
-    exportH = 1280;
-    exportW = Math.round(1280 * aspectData.ratio);
+    exportH = 800;
+    exportW = Math.round(800 * aspectData.ratio);
   }
 
   const captureCanvas = document.createElement('canvas');
