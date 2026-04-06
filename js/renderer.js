@@ -2786,6 +2786,9 @@ function renderExportFrame(canvas, img, settings) {
     }
     settings.calculatedFgBlur = fgBlur;
     
+    // 🔥 OPTIMIZATION: Minor blur amounts (< 0.5px) should be ignored to keep subject tack-sharp
+    if (settings.calculatedFgBlur < 0.5) settings.calculatedFgBlur = 0;
+
     ctx.save();
     ctx.filter = getEnvironmentFilter(settings.timeOfDay ?? S.timeOfDay, settings.isIndoor ?? S.isIndoor, totalBlur);
     

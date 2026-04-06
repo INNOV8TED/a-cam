@@ -1829,7 +1829,23 @@ function init() {
   setEnvironmentMode(S.isIndoor ? 'indoor' : 'outdoor');
   updateTimeOfDay();
   
-  console.log('A-CAM initialized with 50mm / f8.0 defaults');
+  // 🚀 PROGRAMMATIC BINDING for Production Button
+  const prodBtn = document.getElementById('productionBtn');
+  if (prodBtn) {
+    prodBtn.onclick = () => {
+        console.log("🚀 PUNCH TO PRODUCTION: Signal Received!");
+        if (typeof window.pushToProduction === 'function') {
+            window.pushToProduction();
+        } else {
+            console.error("❌ ABORT: pushToProduction not found in global scope");
+        }
+    };
+  }
+
+  // Ensure labels are synced
+  selectModel(S.targetModel || 'Kling');
+  
+  console.log('A-CAM initialized with Production Hub Ready');
 }
 
 function applyVignette(ctx, x, y, w, h, intensity) {
