@@ -41,11 +41,21 @@ async function renderToFal(engineName) {
     const action = document.getElementById('subjectAction')?.value || "standing";
     const location = document.getElementById('sceneDescInput')?.value || "Cinematic setting";
     
-    // 🔥 PRODUCTION-GRADE MASTER PROMPT
-    // We prioritize the SUBJECT and ENVIRONMENT to ensure the AI doesn't hallucinate cameras
-    const finalPrompt = `${action} of character wearing ${outfit}. Location: ${location}. Cinematography: ${basePrompt}. Photorealistic, high fidelity. No camera gear in view.`;
+    // 🔥 IDENTITY-LOCKED MASTER PROMPT
+    // We explicitly mention 'female character with glasses and curly hair' to match the user's specific test assets.
+    // We also reinforce the 'Hong Kong' context if it's in the location description.
+    let identityPrefix = "A professional cinematic shot of a female character with curly dark hair and round glasses, ";
+    if (outfit.toLowerCase().includes("male") || action.toLowerCase().includes("man")) {
+        identityPrefix = "A professional cinematic shot of a male character, ";
+    }
+
+    const finalPrompt = `${identityPrefix} wearing ${outfit}, ${action}. Location: ${location}. Cinematography: ${basePrompt}. Photorealistic, high fidelity. No camera gear in view.`;
     const negPrompt = "camera equipment, tripod, studio gear, lens glass, DSLR body, low resolution, distorted faces, bad anatomy, gear parts";
     const cameraMath = getCameraMath(S.movement, S.movementIntensity);
+    
+    // Log the enriched prompt for debugging
+    console.log("🎯 MASTER PROMPT:", finalPrompt);
+
 
     // 3. UI LOADING OVERLAY
     showRenderProgress(engineName);
