@@ -139,8 +139,12 @@ async function pollFalStatus(engineName, requestId, falKey) {
 }
 
 function showRenderProgress(engineName) {
+    // 🗑️ Cleanup any old ones
+    document.getElementById('renderProgressOverlay')?.remove();
+
     const overlay = document.createElement('div');
     overlay.id = 'renderProgressOverlay';
+    overlay.style.willChange = 'transform, opacity'; 
     overlay.innerHTML = `
         <div class="render-progress-box">
             <div class="render-progress-title">CINEMATIC BAKE: ${engineName.toUpperCase()}</div>
@@ -180,6 +184,9 @@ function updateRenderProgressUI(engineName, elapsed, attempts) {
             <div style="color: var(--accent); font-weight: 900; letter-spacing: 1px;">ETA: ~${etaSecs}s REMAINING</div>
         `;
     }
+    
+    // 🔥 REPAINT BOOSTER: Force browser to redraw
+    void bar?.offsetWidth; 
 }
 
 function handleRenderSuccess(videoUrl) {
@@ -195,7 +202,11 @@ function handleRenderSuccess(videoUrl) {
         download.href = videoUrl;
         download.setAttribute('target', '_blank');
         download.setAttribute('rel', 'noopener noreferrer');
+        
         overlay.classList.add('active');
+        
+        // 🔥 REPAINT BOOSTER: Force browser to show the result
+        void overlay.offsetWidth; 
     } else {
         // Fallback
         const win = window.open(videoUrl, '_blank');
@@ -339,7 +350,9 @@ function updateCharacterWithNewPose(imageUrl) {
         renderFrames();
         
         showToast("Action Pose Integrated!");
+        
+        // 🔥 REPAINT BOOSTER: Force browser to redraw
+        void newImg.offsetWidth;
     };
     newImg.src = imageUrl;
 }
-
