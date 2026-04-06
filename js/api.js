@@ -41,11 +41,13 @@ async function renderToFal(engineName) {
     const action = document.getElementById('subjectAction')?.value || "standing";
     const location = document.getElementById('sceneDescInput')?.value || "Cinematic setting";
     
-    // 🔥 IDENTITY-LOCKED MASTER PROMPT
-    // We explicitly mention 'female character with glasses and curly hair' to match the user's specific test assets.
-    // We also reinforce the 'Hong Kong' context if it's in the location description.
-    let identityPrefix = "A professional cinematic shot of a female character with curly dark hair and round glasses, ";
-    if (outfit.toLowerCase().includes("male") || action.toLowerCase().includes("man")) {
+    // 🔥 DYNAMIC PRODUCTION SYNC (UNIVERSAL ENGINE)
+    // We scrape identity and environment details directly from your interface fields.
+    // This allows the system to work for any person and any location you upload.
+    let identityPrefix = "A professional cinematic shot of the subject, ";
+    if (outfit.toLowerCase().includes("female") || outfit.toLowerCase().includes("woman") || outfit.toLowerCase().includes("girl")) {
+        identityPrefix = "A professional cinematic shot of a female character, ";
+    } else if (outfit.toLowerCase().includes("male") || outfit.toLowerCase().includes("man") || outfit.toLowerCase().includes("boy")) {
         identityPrefix = "A professional cinematic shot of a male character, ";
     }
 
@@ -54,7 +56,7 @@ async function renderToFal(engineName) {
     const cameraMath = getCameraMath(S.movement, S.movementIntensity);
     
     // Log the enriched prompt for debugging
-    console.log("🎯 MASTER PROMPT:", finalPrompt);
+    console.log("🎯 DYNAMIC MASTER PROMPT:", finalPrompt);
 
 
     // 3. UI LOADING OVERLAY
