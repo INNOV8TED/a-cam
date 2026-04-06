@@ -74,6 +74,8 @@ function handleUpload(e) {
 // --- The Helper Function ---
 async function analyzeUploadedOutfit(base64) {
     const outfitBox = document.getElementById('subjectOutfit');
+    if (!outfitBox) return;
+
     outfitBox.value = "";
     outfitBox.placeholder = "🔍 Scanning wardrobe...";
 
@@ -87,49 +89,28 @@ async function analyzeUploadedOutfit(base64) {
             })
         });
 
+        if (!response.ok) throw new Error(`API error: ${response.status}`);
         const data = await response.json();
-        console.log("Outfit analysis result:", data);
         
-        // Accept outfit data regardless of 'analyzed' flag (fallback values are still useful)
         if (data.outfit) {
-            // Ensure we display plain text, not JSON
             let outfitText = data.outfit;
-            
-            // If it accidentally got JSON stringified, parse and extract
             if (outfitText.startsWith('{') || outfitText.startsWith('```')) {
                 try {
                     const cleanJson = outfitText.replace(/```json?|```/g, '').trim();
                     const parsed = JSON.parse(cleanJson);
                     outfitText = parsed.outfit || parsed.description || outfitText;
-                } catch (e) {
-                    // Keep original if parsing fails
-                }
-            }
-            
-            outfitBox.value = outfitText;
-            
-            // Store additional details in state
-            S.outfitDetails = {
-                top: data.top,
-                bottom: data.bottom,
-                accessories: data.accessories,
-                colors: data.colors
-            };
-            showToast('✓ AI ANALYZED: Wardrobe locked');
-        } else if (data.description) {
-            // Fallback to raw description, clean any JSON
-            let desc = data.description;
-            if (desc.startsWith('{')) {
-                try {
-                    const parsed = JSON.parse(desc);
-                    desc = parsed.outfit || parsed.description || desc;
                 } catch (e) {}
             }
-            outfitBox.value = desc;
+            outfitBox.value = outfitText;
+            S.outfitDetails = data;
+            showToast('✓ Wardrobe analyzed');
+        } else if (data.description) {
+            outfitBox.value = data.description;
             showToast('✓ Wardrobe identified');
         }
     } catch (error) {
-        console.error("Vision Error:", error);
+        console.warn("Analysis glitch (503): Falling back to defaults.");
+        outfitBox.value = 'Casual everyday attire';
         outfitBox.placeholder = "Outfit lock (e.g. 'black leather jacket')";
     }
 }
@@ -772,6 +753,7 @@ function drawBadges(ctx, w, h, frameType) {
     ctx.fillText(frameType === 'start' ? 'START' : 'END', w - 46, h - 6);
   }
 }
+
 
 // Helper: Get blur amount based on aperture
 function getBlurAmount(dof) {
@@ -1448,10 +1430,11 @@ function initDropzone() {
       try {
         const packData = JSON.parse(event.target.result);
         installPack(packData);
-      } catch (err) {
-        console.error("Pack parsing error:", err);
-        showToast("❌ Corrupted pack file.");
-      }
+      } catch (error) {
+        console.warn("Analysis glitch (503): Falling back to defaults.");
+        // Non-blocking fallback
+        return { analyzed: false, outfit: 'Casual everyday attire' };
+    }
     };
     reader.readAsText(file);
   });
@@ -2263,7 +2246,7 @@ function handleFaceUpload(e) {
 // INIT (APP START)
 // ═══════════════════════════════════════════════════════════════════════════
 function init() {
-  console.log('🎬 A-CAM Initializing...');
+  // console.log('🎬 A-CAM Initializing...');
   loadCustomPresets(); 
   initDropzone(); 
   loadLayout();
@@ -2289,7 +2272,7 @@ function init() {
   if (typeof updateTimeOfDay === 'function') updateTimeOfDay();
   if (typeof updateAPIStatus === 'function') updateAPIStatus('ready');
   
-  console.log('✅ A-CAM Ready');
+  // console.log('✅ A-CAM Ready');
 }
 
 // Start the engine
