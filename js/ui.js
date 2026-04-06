@@ -218,12 +218,22 @@ function applyEffect(canvas, img, variation = {}) {
     adjustedFeetY -= (charH * liftFactor);
   }
 
+  // 🔥 NEW: SUBJECT MICRO-MOTION (BREATHING)
+  // Subtle 2px sway + tiny scale oscillation to simulate life
+  const breatheTime = Date.now() / 1200;
+  const breathingOffset = Math.sin(breatheTime) * 1.5; 
+  const breathingScale = 1.0 + (Math.cos(breatheTime) * 0.004); 
+  
+  adjustedFeetY += breathingOffset;
+  const finalCharScale = charScaleMult * breathingScale;
+
   ctx.save();
   
-  // GLOBAL DUTCH TILT
+  // GLOBAL DUTCH TILT & SKEW (Welds subject to world)
   if (settings.dutchAngle && settings.dutchAngle !== 0) {
     ctx.translate(w / 2, h / 2);
     ctx.rotate(settings.dutchAngle * Math.PI / 180);
+    if (settings.skewX) ctx.transform(1, 0, settings.skewX, 1, 0, 0);
     ctx.translate(-w / 2, -h / 2);
   }
 
@@ -285,8 +295,8 @@ function applyEffect(canvas, img, variation = {}) {
     drawBackgroundWithSimpleDOF(ctx, S.backgroundPlate, bgX, bgY, finalBgW, finalBgH, focusPlaneY, totalBlur, timeFilter, settings.dutchAngle || 0);
 
     // 5. CHARACTER LAYER (The Actor)
-    const finalCharW = charW * charScaleMult;
-    const finalCharH = charH * charScaleMult;
+    const finalCharW = charW * finalCharScale;
+    const finalCharH = charH * finalCharScale;
     
     const charCanvas = document.createElement('canvas');
     charCanvas.width = Math.ceil(finalCharW); charCanvas.height = Math.ceil(finalCharH);
@@ -373,6 +383,9 @@ function applyEffect(canvas, img, variation = {}) {
       }
       ctx.restore();
   }
+  
+  // 🔥 NEW: OPTICS ENGINE (Lens Flare)
+  drawAnamorphicFlare(ctx, settings, w, h);
 
   // 8. FINAL LENS PASS
   if (S.heroImage) {
@@ -793,6 +806,43 @@ function drawBackgroundWithSimpleDOF(ctx, bgImage, x, y, w, h, groundY, maxBlur,
   ctx.drawImage(blurCanvas, 0, 0);
 }
 
+function drawAnamorphicFlare(ctx, settings, w, h) {
+    const lens = LENS_DATA[settings.lens || S.lens] || {};
+    if (lens.type !== 'anamorphic') return;
+
+    const time = settings.timeOfDay ?? S.timeOfDay;
+    if (S.isIndoor) return;
+
+    const sunDir = settings.sunDirection || S.sunDirection;
+    let sunX = (sunDir === 'east') ? w * 0.15 : w * 0.85;
+    const altitude = 1.0 - Math.abs(time - 12) / 6; 
+    if (altitude < 0) return;
+
+    const sunY = h * (0.5 - (altitude * 0.4));
+    const flareOpacity = 0.22 * altitude;
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    
+    const gradient = ctx.createLinearGradient(0, sunY, w, sunY);
+    gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
+    gradient.addColorStop(0.35, 'rgba(60, 100, 255, 0)');
+    gradient.addColorStop(0.5, `rgba(100, 180, 255, ${flareOpacity})`);
+    gradient.addColorStop(0.65, 'rgba(60, 100, 255, 0)');
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, sunY - 1, w, 3);
+
+    const radial = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, w * 0.4);
+    radial.addColorStop(0, `rgba(120, 200, 255, ${flareOpacity * 0.45})`);
+    radial.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = radial;
+    ctx.fillRect(0, 0, w, h);
+
+    ctx.restore();
+}
+
 // === STATUS BADGES ===
 function drawBadges(ctx, w, h, frameType) {
   let badgeY = 4;
@@ -1182,7 +1232,7 @@ function renderFrames() {
         endSettings.bgScale = 1.0 + (Math.random() * 0.05 * intensity);
         break;
       case 'Dutch Roll':
-        const rollAngle = 15 * intensity;
+        const rollAngle = 25 * intensity; // Increased for better visual feedback
         endSettings.dutchAngle = rollAngle;
         endSettings.skewX = 0.1 * intensity;
         break;
@@ -1196,6 +1246,30 @@ function renderFrames() {
     applyEffect(endCanvas, S.heroImage, endSettings);
   });
 }
+
+// 🔥 NEW: LIVE MOTION ENGINE
+// Continuously updates the preview at 30fps to show breathing/flares
+let isAnimating = false;
+function startMotionEngine() {
+    if (isAnimating) return;
+    isAnimating = true;
+    
+    function loop() {
+        if (!isAnimating) return;
+        
+        // We only render if the user is looking at the screen (tab visible)
+        if (document.visibilityState === 'visible') {
+            renderFrames();
+        }
+        
+        requestAnimationFrame(loop);
+    }
+    
+    requestAnimationFrame(loop);
+}
+
+// Initialize the motion engine
+setTimeout(startMotionEngine, 1000);
 
 function clearCanvases() {
   ['startCanvas', 'endCanvas'].forEach(id => {

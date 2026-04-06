@@ -1859,8 +1859,51 @@ function loadImage(src) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// DYNAMIC COMPOSITING (SHADOWS & LIGHTING)
+// DYNAMIC COMPOSITING (SHADOWS, LIGHTING & VFX)
 // ═══════════════════════════════════════════════════════════════════════════
+
+function drawAnamorphicFlare(ctx, settings, w, h) {
+    const lens = LENS_DATA[settings.lens || S.lens] || {};
+    if (lens.type !== 'anamorphic') return;
+
+    const time = settings.timeOfDay ?? S.timeOfDay;
+    const isIndoor = settings.isIndoor ?? S.isIndoor;
+    if (isIndoor) return; // Flares are generally outdoor sun-driven in our current model
+
+    // Calculate Sun Horizontal Position
+    const sunDir = settings.sunDirection || S.sunDirection;
+    let sunX = (sunDir === 'east') ? w * 0.15 : w * 0.85;
+    
+    // Altitude based on time (High at 12pm, Low at 6am/6pm)
+    const altitude = 1.0 - Math.abs(time - 12) / 6; 
+    if (altitude < 0) return; // Sun is below horizon
+
+    const sunY = h * (0.5 - (altitude * 0.4));
+    const flareOpacity = 0.25 * altitude;
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    
+    // The "Streak": A long, horizontal blue-tinted light
+    const gradient = ctx.createLinearGradient(0, sunY, w, sunY);
+    gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
+    gradient.addColorStop(0.35, 'rgba(60, 100, 255, 0)');
+    gradient.addColorStop(0.5, `rgba(100, 180, 255, ${flareOpacity})`);
+    gradient.addColorStop(0.65, 'rgba(60, 100, 255, 0)');
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, sunY - 2, w, 4); // Core streak
+
+    // Secondary soft glow
+    const radial = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, w * 0.4);
+    radial.addColorStop(0, `rgba(120, 200, 255, ${flareOpacity * 0.4})`);
+    radial.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = radial;
+    ctx.fillRect(0, 0, w, h);
+
+    ctx.restore();
+}
 
 // Creates a Day-for-Night cinematic grade for the background plate
 function getEnvironmentFilter(timeOfDay, isIndoor, baseBlur) {
@@ -2465,10 +2508,14 @@ function exportSingleFrame(frameType) {
         frameSettings.bgScale = 1.0 + (0.60 * intensity);
         frameSettings.charScale = 1.0; 
         break;
+      case 'Dutch Roll':
+        frameSettings.dutchAngle = 25 * intensity;
+        frameSettings.skewX = 0.1 * intensity;
+        break;
     }
 
     if (S.angle === 'Dutch Tilt') {
-        frameSettings.dutchAngle = (frameSettings.dutchAngle || 0) + 22 * intensity;
+        frameSettings.dutchAngle = (frameSettings.dutchAngle || 0) + 25; // Constant tilt
     }
   }
   
@@ -2594,6 +2641,7 @@ function renderExportFrame(canvas, img, settings) {
     const bgY = adjustedFeetY - bgGroundY + moveY + angleShiftY;
     
     ctx.drawImage(S.backgroundPlate, bgX, bgY, scaledBgW, scaledBgH);
+    ctx.restore(); // Restore environment filter ctx.save() from 2582
   }
 
   const finalCharW = charW * charZoomScale;
@@ -2649,6 +2697,9 @@ function renderExportFrame(canvas, img, settings) {
     }
     applyAtmosphericHaze(ctx, w, h, S.hazeAmount, S.hazeColor, distanceFactor);
   }
+  
+  // 🔥 NEW: OPTICS ENGINE (Lens Flare)
+  drawAnamorphicFlare(ctx, settings, w, h);
   
   // Anime Speed Lines (Restore aggressive look)
   if (settings.frameType === 'end' && 
