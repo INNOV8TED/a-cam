@@ -944,6 +944,7 @@ function handleBgUpload(e) {
         });
         
         console.log('📷 API response status:', response.status);
+        const result = await response.json();
         // console.log('📷 Background analysis result:', result);
         
         // Populate Location Description automatically from analysis
@@ -1013,8 +1014,11 @@ function updateSceneDescription() {
 }
 
 function updatePerformance() {
-  S.subjectPerformance = document.getElementById('performanceInput').value;
-  generatePrompt();
+  const perfInput = document.getElementById('performanceInput') || document.getElementById('subjectAction');
+  if (perfInput) {
+    S.subjectPerformance = perfInput.value;
+    generatePrompt();
+  }
 }
 
 function setBgSource(mode) {
