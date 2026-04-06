@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>▶ A-CAM — Director's Interface</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%230a0a0a'/><text x='50' y='68' text-anchor='middle' font-size='60' fill='%23cc3333'>▶</text></svg>">
+  <meta property="og:title" content="A-CAM — Cinematography Prompt Engine">
+  <meta property="og:description"
+    content="Director's interface for AI video generation. Professional cinematography controls for Veo, Runway, Kling.">
+  <link
+    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@100;200;300;400;700;800;900&family=Space+Grotesk:wght@300;400;500;700&family=Montserrat:wght@400;700;800;900&display=swap"
+    rel="stylesheet">
+
+
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+
+  <!-- HEADER -->
+  <header class="header">
+    <h1><span>IN-NO-V8</span> DIRECTOR</h1>
+    <div class="api-status offline" id="apiStatus">○ OFFLINE</div>
+    <div class="header-icons">
+      <button class="header-icon" onclick="resetLayout()" title="Reset Layout">⊞</button>
+      <button class="header-icon" onclick="resetAll()" title="Reset">↺</button>
+      <button class="header-icon" onclick="showInfo()" title="Info">?</button>
+    </div>
+  </header>
+
+  <!-- MAIN GRID -->
+  <main class="main" id="mainGrid">
+
+    <!-- TOP SECTION: Input Image + Draft Storyboard (shared resize) -->
+    <div class="top-section resizable" id="topSection" style="height:240px">
+
+      <!-- LEFT: INPUT IMAGE -->
+      <div class="panel input-panel resizable" id="inputPanel" style="width:220px">
+        <div class="section-header" onclick="toggleSection(this)">
+          <span class="panel-title" style="display: flex; align-items: center; gap: 8px;">
+            Input Image
+            <button id="charHelpBtn" class="btn btn-primary"
+              style="padding: 2px 6px; font-size: 7px; letter-spacing: 0.5px;" onclick="event.stopPropagation();">
+              IMPORT GUIDE
+            </button>
+          </span>
+          <span class="section-toggle">▼</span>
+        </div>
+
+        <div class="section-content">
+          <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+            <div class="upload-icon">◎</div>
+            <div class="upload-text">
+              Actor (For Layout)<br>
+              <span style="color:#333">pose / scale / shadow</span>
+            </div>
+            <img id="heroImage" alt="Hero">
+            <button class="clear-btn" onclick="event.stopPropagation();clearImage()">✕ Clear</button>
+            <div class="analyzed-badge" id="analyzedBadge">✓ AI ANALYZED</div>
+          </div>
+
+          <div class="control-group" style="margin-top: 12px; border-top: 1px solid #1a1a1c; padding-top: 12px;">
+            <div class="control-label" style="margin-bottom: 6px;">
+              Master Identity Sheet <span class="control-value" id="masterStatus" style="color: #444;">MISSING</span>
+            </div>
+            <div class="upload-zone" id="masterZone" style="height: 60px; min-height: 60px; border-style: dashed;"
+              onclick="document.getElementById('masterInput').click()">
+              <div class="upload-text" style="font-size: 7px; line-height: 1.2;">
+                ↑ DROP MULTI-ANGLE SHEET<br>
+                <span style="color:#444">High-fidelity face/outfit lock</span>
+              </div>
+              <img id="masterPreview"
+                style="display:none; width:100%; height:100%; object-fit:cover; position:absolute; top:0; left:0; border-radius:2px;">
+            </div>
+            <input type="file" id="masterInput" accept="image/*" style="display:none"
+              onchange="handleMasterUpload(event)">
+          </div>
+
+          <div class="control-group" style="margin-top: 8px; border-top: 1px solid #1a1a1c; padding-top: 8px;">
+            <div class="control-label" style="margin-bottom: 6px;">
+              Face Close-Up <span class="control-value" id="faceStatus" style="color: #444;">OPTIONAL</span>
+            </div>
+            <div class="upload-zone" id="faceZone" style="height: 50px; min-height: 50px; border-style: dashed;"
+              onclick="document.getElementById('faceInput').click()">
+              <div class="upload-text" style="font-size: 7px; line-height: 1.2;">
+                ↑ DROP HIGH-RES FACE<br>
+                <span style="color:#444">Better likeness in action poses</span>
+              </div>
+              <img id="facePreview"
+                style="display:none; width:100%; height:100%; object-fit:cover; position:absolute; top:0; left:0; border-radius:2px;">
+            </div>
+            <input type="file" id="faceInput" accept="image/*" style="display:none" onchange="handleFaceUpload(event)">
+          </div>
+        </div>
+
+        <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="handleUpload(event)">
+        <div class="resize-handle resize-handle-right" onmousedown="startResize(event, 'inputPanel', 'width')"></div>
+      </div>
+
+      <!-- CENTER: DIRECTOR PRESETS -->
+      <div class="panel storyboard-panel" id="storyboardPanel">
+        <div class="section-header" style="display: flex; justify-content: space-between; align-items: center;"
+          title="Iconic camera moves from legendary directors">
+          <div onclick="toggleSection(this.parentElement)" style="flex-grow: 1; cursor: pointer;">
+            <span class="panel-title">Director's Moves <span style="color:var(--dim);font-weight:400">(click to
+                apply)</span></span>
+          </div>
+          <div style="display: flex; gap: 4px; margin-right: 10px;">
+            <input type="file" id="packFileInput" accept=".acam,.json" style="display:none"
+              onchange="handlePackUpload(event)">
+            <button onclick="document.getElementById('packFileInput').click()" class="btn"
+              style="padding: 2px 8px; font-size: 8px; border-color: #333;" title="Load an .acam Director Pack">
+              ↑ LOAD
+            </button>
+            <button onclick="saveCurrentPreset()" class="btn"
+              style="padding: 2px 8px; font-size: 8px; border-color: #333;" title="Save current settings">
+              + SAVE
+            </button>
+            <button onclick="exportCustomPack()" class="btn"
+              style="padding: 2px 8px; font-size: 8px; border-color: #cc3333; color: #cc3333;"
+              title="Export your custom moves as a .acam pack">
+              ↓ EXPORT
+            </button>
+          </div>
+          <span class="section-toggle" onclick="toggleSection(this.parentElement)">▼</span>
+        </div>
+        <div class="section-content">
+          <div class="storyboard-grid" id="storyboardGrid">
+          </div>
+
+          <div class="performance-section">
+            <div class="performance-label">Subject Performance & Consistency</div>
+
+            <div
+              style="display: grid; grid-template-columns: 1fr 1fr 1fr min-content; gap: 8px; margin-bottom: 10px; align-items: start;">
+              <textarea class="performance-input" id="subjectAction" placeholder="Action (e.g., 'Sprinting in terror')"
+                style="height: 60px; min-height: 60px; margin: 0; resize: none;"
+                oninput="updatePerformance()"></textarea>
+
+              <textarea class="performance-input" id="subjectOutfit"
+                placeholder="Outfit lock (e.g., 'brown leather jacket')"
+                style="height: 60px; min-height: 60px; margin: 0; resize: none;"
+                oninput="updatePerformance()"></textarea>
+
+              <textarea class="performance-input" id="actionTimeline"
+                placeholder="Timeline (e.g., 'runs, stops, screams')"
+                style="height: 60px; min-height: 60px; margin: 0; resize: none;"
+                oninput="updatePerformance()"></textarea>
+
+              <button onclick="generateActionStandIn()"
+                style="width: 60px; height: 60px; padding: 5px; background-color: #cc3333; color: white; border: none; border-radius: 4px; cursor: pointer; font-family: inherit; font-weight: bold; font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; justify-content: center; text-align: center; line-height: 1.2;">
+                ACTION<br>POSE
+              </button>
+            </div>
+
+            <div id="aiProgressBar" class="ai-progress-container" style="display: none; margin-bottom: 10px;">
+              <div class="ai-progress-text">Baking Action Pose...</div>
+              <div class="ai-progress-bar-bg">
+                <div id="aiProgressFill" class="ai-progress-bar-fill"></div>
+              </div>
+            </div>
+
+            <button onclick="generateActionStandIn()"
+              style="width: 100%; padding: 10px; background-color: #cc3333; color: white; border: none; border-radius: 4px; cursor: pointer; font-family: inherit; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;">
+              Generate Action Pose
+            </button>
+
+            <div class="performance-hint">Locks facial identity via PulID and weights outfit data to prevent
+              hallucination.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Shared resize handle for entire top section -->
+      <div class="resize-handle resize-handle-bottom" onmousedown="startResize(event, 'topSection', 'height')"></div>
+    </div>
+
+    <!-- RIGHT: CINEMATOGRAPHY CONTROLS -->
+    <div class="panel controls-panel resizable" id="controlsPanel" style="width:280px">
+      <!-- Tab Navigation -->
+      <div class="control-tabs">
+        <button class="control-tab active" onclick="switchControlTab('camera')">Camera</button>
+        <button class="control-tab" onclick="switchControlTab('scene')">Scene</button>
+        <button class="control-tab" onclick="switchControlTab('frame')">Frame</button>
+      </div>
+
+      <!-- CAMERA TAB -->
+      <div class="tab-content active" id="cameraTab">
+
+        <!-- Camera Lens -->
+        <div class="control-group">
+          <div class="control-label">Camera Lens <span class="control-value" id="lensValue">35mm</span></div>
+          <div class="control-row">
+            <select class="sel" id="lensSelect" onchange="updateLens()">
+              <optgroup label="Action / Extreme">
+                <option value="8mm Fisheye">8mm Fisheye</option>
+                <option value="12mm GoPro">12mm GoPro</option>
+              </optgroup>
+              <optgroup label="Standard">
+                <option value="15mm Ultra Wide">15mm Ultra Wide</option>
+                <option value="24mm Wide">24mm Wide</option>
+                <option value="35mm Standard" selected>35mm Standard</option>
+                <option value="50mm Normal">50mm Normal</option>
+                <option value="85mm f/1.4 Bokeh">85mm f/1.4 Bokeh</option>
+                <option value="135mm Telephoto">135mm Telephoto</option>
+              </optgroup>
+              <optgroup label="Anamorphic Cinema">
+                <option value="35mm Anamorphic">35mm Anamorphic</option>
+                <option value="50mm Anamorphic">50mm Anamorphic</option>
+              </optgroup>
+            </select>
+          </div>
+        </div>
+
+        <!-- Angle -->
+        <div class="control-group">
+          <div class="control-label">Angle <span class="control-value" id="angleValue">Eye Level</span></div>
+          <div class="control-row">
+            <select class="sel" id="angleSelect" onchange="updateAngle()">
+              <option value="Eye Level" selected>Eye Level</option>
+              <option value="Low Angle Hero">Low Angle Hero</option>
+              <option value="High Angle">High Angle</option>
+              <option value="Dutch Tilt">Dutch Tilt</option>
+              <option value="Bird's Eye">Bird's Eye</option>
+              <option value="Worm's Eye">Worm's Eye</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Movement -->
+        <div class="control-group">
+          <div class="control-label">Movement <span class="control-value" id="movementValue">Static</span></div>
+          <div class="control-row">
+            <select class="sel" id="movementSelect" onchange="updateMovement()">
+              <option value="Static" selected>Static</option>
+              <option value="Dolly Push In">Dolly Push In</option>
+              <option value="Dolly Pull Out">Dolly Pull Out</option>
+              <option value="Dolly Zoom">Dolly Zoom (Vertigo)</option>
+              <option value="Pan Left/Right">Pan Left/Right</option>
+              <option value="Tilt Up/Down">Tilt Up/Down</option>
+              <option value="Orbital Arc">Orbital Arc</option>
+              <option value="Tracking Shot">Tracking Shot</option>
+              <option value="Crane Up">Crane Up</option>
+              <option value="Handheld">Handheld</option>
+              <option value="Zoom In">Zoom In</option>
+              <option value="Snorricam">Snorricam (Body Cam)</option>
+              <option value="Dutch Roll">Dutch Roll + Skew</option>
+            </select>
+            <input type="range" class="rng rng-mini" id="movementIntensity" min="0" max="100" value="50"
+              oninput="updateAll()" title="← Left/Down/Out | Center | Right/Up/In →">
+          </div>
+        </div>
+
+        <!-- Environment Mode -->
+        <div class="control-group">
+          <div class="control-label">Environment</div>
+          <div class="control-row">
+            <button class="chip" id="modeOutdoor" onclick="setEnvironmentMode('outdoor')">☀ Outdoor</button>
+            <button class="chip active" id="modeIndoor" onclick="setEnvironmentMode('indoor')">⬚ Indoor</button>
+          </div>
+        </div>
+
+        <!-- Lighting Style -->
+        <div class="control-group">
+          <div class="control-label">Lighting Style <span class="control-value" id="lightingValue">Natural</span></div>
+          <div class="control-row">
+            <select class="sel" id="lightingSelect" onchange="updateLighting()">
+              <optgroup label="Natural">
+                <option value="Natural Ambient" selected>Natural Ambient</option>
+                <option value="Soft Diffused">Soft Diffused</option>
+              </optgroup>
+              <optgroup label="Dramatic">
+                <option value="Hard Shadow Noir">Hard Shadow Noir</option>
+                <option value="Backlit Silhouette">Backlit Silhouette</option>
+                <option value="Volumetric Fog">Volumetric Fog</option>
+              </optgroup>
+              <optgroup label="Artificial">
+                <option value="Studio Key">Studio Key Light</option>
+                <option value="Neon Rim Light">Neon / Practical</option>
+                <option value="Practical Lights">Practical Lights</option>
+              </optgroup>
+            </select>
+          </div>
+          <div class="control-row" style="margin-top:6px">
+            <span style="font-size:7px;color:var(--dim);width:50px">Intensity</span>
+            <input type="range" class="rng" id="lightingIntensity" min="0" max="100" value="70"
+              oninput="updateLightingIntensity()">
+            <span class="control-value" id="lightingIntensityValue" style="width:30px;text-align:right">70%</span>
+          </div>
+        </div>
+
+        <!-- Time of Day (Outdoor only) -->
+        <div class="control-group" id="timeGroup">
+          <div class="control-label">Time of Day <span class="control-value" id="timeValue">12:00</span></div>
+          <div class="time-slider-container">
+            <div class="time-icons">
+              <span>🌙</span>
+              <span>🌅</span>
+              <span>☀️</span>
+              <span>🌅</span>
+              <span>🌙</span>
+            </div>
+            <input type="range" class="rng time-slider" id="timeSlider" min="0" max="24" step="0.5" value="12"
+              oninput="updateTimeOfDay()">
+            <div class="time-track-gradient"></div>
+          </div>
+          <div class="time-labels">
+            <span>00:00</span>
+            <span>06:00</span>
+            <span>12:00</span>
+            <span>18:00</span>
+            <span>24:00</span>
+          </div>
+          <div class="sun-info" id="sunInfo">
+            <span id="sunPosition">Sun: Overhead</span>
+            <span id="colorTemp">5500K</span>
+          </div>
+        </div>
+
+        <!-- Sun Direction (Outdoor only) -->
+        <div class="control-group" id="sunDirectionGroup">
+          <div class="control-label">Sun Direction</div>
+          <div class="control-row">
+            <button class="chip active" id="sunEast" onclick="setSunDirection('east')">← East (AM)</button>
+            <button class="chip" id="sunWest" onclick="setSunDirection('west')">West (PM) →</button>
+          </div>
+        </div>
+
+        <!-- Depth of Field -->
+        <div class="control-group">
+          <div class="control-label">Depth of Field <span class="control-value" id="dofValue">f/4.0</span></div>
+          <div class="control-row">
+            <select class="sel" id="dofSelect" onchange="updateDOF()">
+              <option value="f/1.4 Razor Thin">f/1.4 Razor Thin</option>
+              <option value="f/2.0 Shallow">f/2.0 Shallow</option>
+              <option value="f/2.8 Cinematic">f/2.8 Cinematic</option>
+              <option value="f/4.0 Balanced" selected>f/4.0 Balanced</option>
+              <option value="f/5.6 Deep">f/5.6 Deep</option>
+              <option value="f/8.0 Sharp">f/8.0 Sharp</option>
+              <option value="f/11 Deep Focus">f/11 Deep Focus</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Rack Focus -->
+        <div class="control-group">
+          <div class="control-label">Rack Focus <span class="control-value" id="rackFocusValue">0 (Static)</span></div>
+          <div class="control-row" style="display: flex; align-items: center; justify-content: space-between;">
+            <span style="font-size:9px;color:var(--dim);white-space:nowrap;">← BG (Blurry)</span>
+            <input type="range" class="rng" id="rackFocusSlider" min="-100" max="100" value="0"
+              oninput="updateRackFocus()" style="margin: 0 10px; flex-grow: 1;">
+            <span style="font-size:9px;color:var(--dim);white-space:nowrap;">FG (Blurry) →</span>
+          </div>
+        </div>
+
+        <!-- Atmospheric Haze (Z-Depth Fog) -->
+        <div class="control-group">
+          <div class="control-label">Atmosphere <span class="control-value" id="hazeValue">0%</span></div>
+          <div class="control-row">
+            <input type="range" class="rng" id="hazeSlider" min="0" max="100" value="0" oninput="updateHaze()">
+          </div>
+          <div class="control-row" style="margin-top:4px">
+            <button class="chip chip-mini" id="hazeClear" onclick="setHazePreset('clear')">Clear</button>
+            <button class="chip chip-mini" id="hazeMist" onclick="setHazePreset('mist')">Mist</button>
+            <button class="chip chip-mini" id="hazeFog" onclick="setHazePreset('fog')">Fog</button>
+            <button class="chip chip-mini" id="hazeSmoke" onclick="setHazePreset('smoke')">Smoke</button>
+          </div>
+        </div>
+
+        <!-- Quick Presets (Camera Tab) -->
+        <div class="control-group" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+          <div class="control-label">Quick Presets</div>
+          <div class="preset-row">
+            <button class="chip" onclick="applyPreset('hero')">Hero Shot</button>
+            <button class="chip" onclick="applyPreset('cinematic')">Cinematic</button>
+            <button class="chip" onclick="applyPreset('dramatic')">Dramatic</button>
+            <button class="chip" onclick="applyPreset('intimate')">Intimate</button>
+            <button class="chip" onclick="applyPreset('action')">Action</button>
+            <button class="chip" onclick="applyPreset('noir')">Noir</button>
+          </div>
+        </div>
+
+      </div><!-- End Camera Tab -->
+
+      <!-- SCENE TAB -->
+      <div class="tab-content" id="sceneTab">
+
+        <!-- Background Source Toggle -->
+        <div class="control-group">
+          <div class="control-label">Background Source</div>
+          <div class="source-toggle">
+            <button class="source-btn active" id="srcUpload" onclick="setBgSource('upload')">📁 Upload</button>
+            <button class="source-btn" id="srcImagine" onclick="setBgSource('imagine')">✨ Imagine</button>
+          </div>
+        </div>
+
+        <!-- Upload Mode Panel -->
+        <div class="bg-mode-panel" id="uploadModePanel">
+          <div class="scene-upload-zone" id="bgUploadZone" onclick="document.getElementById('bgFileInput').click()">
+            <div class="scene-upload-icon">◫</div>
+            <div class="scene-upload-text">Upload location image</div>
+            <img id="bgPlateImage" style="display:none">
+          </div>
+          <input type="file" id="bgFileInput" accept="image/*" onchange="handleBgUpload(event)" style="display:none">
+          <div class="bg-action-row" id="bgActionRow" style="display:none">
+            <button class="btn-analyze" id="analyzeBtn" onclick="analyzeAndOutpaint()">
+              ◎ Analyze & Outpaint
+            </button>
+            <button class="btn-download-bg" id="downloadBgBtn" onclick="downloadBackground()"
+              title="Download outpainted background for use in other video AI systems">
+              ↓ Background
+            </button>
+          </div>
+        </div>
+
+        <!-- Imagine Mode Panel -->
+        <div class="bg-mode-panel" id="imagineModePanel" style="display:none">
+          <textarea class="scene-textarea" id="sceneDescInput"
+            placeholder="Describe the location...&#10;e.g. 'Neon-lit city street at midnight, rain-slicked pavement'"
+            oninput="updateSceneDescription()"></textarea>
+          <button class="btn-generate" id="generateBtn" onclick="generateSceneFromText()">✦ Generate Plate</button>
+        </div>
+
+        <!-- Location Library -->
+        <div class="control-group">
+          <div class="control-label">Location Library</div>
+          <div class="env-presets" id="envPresets">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+
+        <!-- Depth Layers (Parallax) -->
+        <div class="control-group" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+          <div class="control-label" style="color:var(--accent)">Depth Layers (Parallax)</div>
+
+          <div class="depth-layers">
+            <div class="depth-layer">
+              <div class="depth-layer-header"><span class="depth-dot subject"></span> Foreground / Subject</div>
+              <input type="text" class="depth-input" id="subjectInput" value="Primary subject"
+                placeholder="e.g. A cybernetic ronin" oninput="updateDepthLayers()">
+            </div>
+            <div class="depth-layer">
+              <div class="depth-layer-header"><span class="depth-dot midground"></span> Mid-ground</div>
+              <input type="text" class="depth-input" id="midgroundInput" placeholder="Objects at medium distance"
+                oninput="updateDepthLayers()">
+            </div>
+            <div class="depth-layer">
+              <div class="depth-layer-header"><span class="depth-dot background"></span> Background</div>
+              <input type="text" class="depth-input" id="backgroundInput" placeholder="Distant elements"
+                oninput="updateDepthLayers()">
+            </div>
+          </div>
+        </div>
+
+      </div><!-- End Scene Tab -->
+
+      <!-- FRAME TAB -->
+      <div class="tab-content" id="frameTab">
+
+        <!-- Aspect Ratio -->
+        <div class="control-group">
+          <div class="control-label">Aspect Ratio <span class="control-value" id="ratioValue">16:9</span></div>
+          <div class="ratio-chips" id="ratioChips">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+
+        <!-- Resolution -->
+        <div class="control-group">
+          <div class="control-label">Resolution <span class="control-value" id="resValue">1080p</span></div>
+          <div class="preset-row">
+            <button class="chip" id="res720" onclick="setResolution('720p')">720p</button>
+            <button class="chip active" id="res1080" onclick="setResolution('1080p')">1080p</button>
+            <button class="chip" id="res2K" onclick="setResolution('2K')">2K</button>
+            <button class="chip" id="res4K" onclick="setResolution('4K')">4K</button>
+          </div>
+        </div>
+
+        <!-- Wireframe Overlays -->
+        <div class="control-group">
+          <div class="control-label">Composition Guides</div>
+          <div class="overlay-toggles">
+            <label class="toggle-label">
+              <input type="checkbox" id="toggleThirds" onchange="toggleOverlay('showRuleOfThirds')">
+              <span class="toggle-text">Rule of Thirds</span>
+            </label>
+            <label class="toggle-label">
+              <input type="checkbox" id="toggleSafe" onchange="toggleOverlay('showSafeAreas')">
+              <span class="toggle-text">Safe Areas</span>
+            </label>
+            <label class="toggle-label">
+              <input type="checkbox" id="toggleCenter" onchange="toggleOverlay('showCenterCrosshair')">
+              <span class="toggle-text">Center Cross</span>
+            </label>
+            <label class="toggle-label">
+              <input type="checkbox" id="toggleGroundPlane" onchange="toggleOverlay('showGroundPlane')">
+              <span class="toggle-text">Ground Plane</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="control-group" id="perspectiveControls"
+          style="margin-top:12px; padding-top:12px; border-top:1px solid var(--border); display: none;">
+          <div class="control-label" style="color:var(--accent)">Perspective Refinement</div>
+
+          <div class="control-group">
+            <div class="control-label">Horizon Height <span class="control-value" id="horizonValueDisplay">35%</span>
+            </div>
+            <div class="control-row">
+              <input type="range" class="rng" id="horizonSlider" min="0" max="100" value="35"
+                oninput="updatePerspective('horizonY', this.value)">
+            </div>
+          </div>
+
+          <div class="control-group">
+            <div class="control-label">Ground Level <span class="control-value" id="groundValueDisplay">85%</span></div>
+            <div class="control-row">
+              <input type="range" class="rng" id="groundSlider" min="0" max="100" value="85"
+                oninput="updatePerspective('groundPlaneY', this.value)">
+            </div>
+          </div>
+          <div class="performance-hint">Align these to match the photo's vanishing point.</div>
+        </div>
+
+        <!-- Output Info -->
+        <div class="control-group" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+          <div class="control-label" style="color:var(--accent)">Output Info</div>
+          <div style="background:#1a1a1c;padding:10px;font-size:8px;color:var(--dim);line-height:1.7">
+            <div><span style="color:var(--text)">Ratio:</span> <span id="outputRatio">16:9</span></div>
+            <div><span style="color:var(--text)">Resolution:</span> <span id="outputRes">1920×1080</span></div>
+            <div><span style="color:var(--text)">Target:</span> <span id="outputTarget">Veo 3</span></div>
+          </div>
+        </div>
+
+      </div><!-- End Frame Tab -->
+
+      <div class="resize-handle resize-handle-left" onmousedown="startResize(event, 'controlsPanel', 'width', 'left')">
+      </div>
+    </div>
+
+    <!-- BOTTOM: START/END FRAMES (Real composited output) -->
+    <div class="bottom-section" id="framesSection">
+      <div class="panel-title" style="margin-bottom:6px">Preview Frames <span
+          style="color:var(--success);font-weight:400">(composited)</span></div>
+      <div class="frames-content">
+        <div class="frame-panel">
+          <div class="frame-label">Start Frame</div>
+          <div class="frame-preview" id="startFrame">
+            <canvas id="startCanvas"></canvas>
+          </div>
+        </div>
+        <div class="frame-connector">▶ ▷ ▶</div>
+        <div class="frame-panel">
+          <div class="frame-label">End Frame</div>
+          <div class="frame-preview" id="endFrame">
+            <canvas id="endCanvas"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PROMPT OUTPUT -->
+    <div class="prompt-section" id="promptSection">
+      <div class="prompt-label">Generated Technical Prompt</div>
+      <div class="prompt-box" id="promptBox">Upload a hero image to generate your cinematography prompt...</div>
+      <div class="model-badges" id="modelBadges">
+        <!-- Generated by JS -->
+      </div>
+      <div class="prompt-actions">
+        <button class="btn btn-transform" onclick="transformToReal()">✦ Transform to Real</button>
+
+        <!-- Face Lock Toggle -->
+        <label class="face-lock-toggle"
+          title="Use high-res face close-up as end frame to preserve identity on close-ups">
+          <input type="checkbox" id="faceLockToggle" onchange="updateFaceLock()">
+          <span class="face-lock-label">🎯 Face Lock</span>
+        </label>
+
+        <button class="btn btn-primary" onclick="openInModel()">Generate Video Render →</button>
+        <button class="btn" onclick="copyPrompt()">⎘ Copy Prompt</button>
+        <button class="btn" onclick="exportStartFrame()">↓ Start Frame</button>
+        <button class="btn" onclick="exportEndFrame()">↓ End Frame</button>
+        <button class="btn btn-dim" onclick="saveStoryboard()">↓ Storyboard</button>
+
+        <button class="production-btn pulse-red" onclick="pushToProduction()">
+          <span class="icon">🚀</span> PUSH TO PRODUCTION (OMNI)
+        </button>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- TOAST -->
+  <div class="toast" id="toast"></div>
+
+  <!-- PROGRESS OVERLAY -->
+  <div class="progress-overlay" id="progressOverlay">
+    <div class="progress-container">
+      <div class="progress-title" id="progressTitle">Processing...</div>
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+      <div class="progress-status" id="progressStatus">Initializing...</div>
+    </div>
+  </div>
+
+  <div id="charHelpModal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Character Import Guide</h3>
+        <button id="closeCharHelp" class="close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-subtitle">For the cleanest A-CAM composites and AI generations, prepare your character image
+          using these best practices before uploading:</p>
+
+        <div class="guide-grid">
+          <div class="guide-card do-card">
+            <div class="card-header">✅ DO</div>
+            <ul>
+              <li><strong>Solid Backgrounds</strong> Use a transparent PNG, pure white, or green screen background.</li>
+              <li><strong>Full Body Framing</strong> Ensure the head, arms, and feet are fully visible in the frame.
+              </li>
+              <li><strong>Flat Lighting</strong> Studio or neutral lighting works best. A-CAM will add the cinematic
+                shadows for you.</li>
+            </ul>
+          </div>
+          <div class="guide-card dont-card">
+            <div class="card-header">❌ DON'T</div>
+            <ul>
+              <li><strong>Cluttered Backgrounds</strong> Avoid cityscapes, rooms, or props touching the character.</li>
+              <li><strong>Cropped Images</strong> Don't use waist-up or headshots. They will look unnatural and float.
+              </li>
+              <li><strong>Harsh Shadows</strong> Avoid images where the subject is already half in pitch-black shadow.
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/state.js"></script>
+  <script src="js/renderer.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+
+
+
+</body>
+
+</html>

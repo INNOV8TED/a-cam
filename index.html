@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>A-CAM — Visual Director for AI Video</title>
+<meta name="description" content="Director's interface for AI video generation. Real-time storyboard previews, scene compositing, and Gemini-powered prompt engineering for Veo 3, Runway, Kling.">
+<meta property="og:title" content="A-CAM by in-no-v8">
+<meta property="og:description" content="Visual Director for AI Video. Real-time storyboards, scene compositing, 6 lenses, 10 movements. Gemini-powered.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://a-cam.in-no-v8.com">
+<meta property="og:image" content="https://a-cam.in-no-v8.com/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="A-CAM — Visual Director for AI Video">
+<meta name="twitter:description" content="Real-time storyboards, scene compositing, Gemini AI analysis.">
+<meta name="twitter:image" content="https://a-cam.in-no-v8.com/og-image.png">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%230a0a0a'/><text x='50' y='68' text-anchor='middle' font-size='60' fill='%23cc3333'>▶</text></svg>">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@100;300;400;700;800&family=Montserrat:wght@400;700;800;900&family=Space+Grotesk:wght@300;400;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#08080a;--text:#c8c4bc;--accent:#c33;--dim:#555;--success:#2a9d4a}
+body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace;overflow-x:hidden}
+a{color:inherit;text-decoration:none}
+
+/* HERO */
+.hero{min-height:100vh;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:40px 20px;position:relative;overflow:hidden}
+.hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 30% 50%,rgba(204,51,51,0.06) 0%,transparent 60%),radial-gradient(ellipse at 70% 30%,rgba(51,51,204,0.04) 0%,transparent 60%);pointer-events:none}
+.hero-badge{font-size:9px;letter-spacing:4px;color:var(--dim);text-transform:uppercase;margin-bottom:30px}
+.hero-title{font-family:'Montserrat',sans-serif;font-weight:900;font-size:clamp(48px,10vw,120px);line-height:0.9;letter-spacing:-3px;color:#e8e4dc;margin-bottom:20px;text-transform:uppercase}
+.hero-title span{color:var(--accent)}
+.hero-sub{font-size:14px;color:var(--dim);max-width:560px;line-height:1.8;margin-bottom:40px;letter-spacing:0.5px;padding:0 10px}
+.hero-cta{display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
+.btn-primary{display:inline-block;background:var(--accent);color:#fff;padding:14px 36px;font-size:13px;font-weight:700;letter-spacing:2px;text-transform:uppercase;border:none;cursor:pointer;font-family:inherit;transition:background 0.2s}
+.btn-primary:hover{background:#e44}
+.btn-secondary{display:inline-block;background:transparent;color:var(--text);padding:14px 36px;font-size:13px;font-weight:700;letter-spacing:2px;text-transform:uppercase;border:1px solid #333;cursor:pointer;font-family:inherit;transition:border-color 0.2s}
+.btn-secondary:hover{border-color:var(--accent)}
+.hero-stats{display:flex;gap:40px;margin-top:60px;flex-wrap:wrap;justify-content:center}
+.stat{text-align:center}
+.stat-num{font-family:'Montserrat',sans-serif;font-weight:900;font-size:28px;color:#e8e4dc}
+.stat-label{font-size:8px;letter-spacing:2px;color:var(--dim);text-transform:uppercase;margin-top:4px}
+
+/* AI BADGE */
+.ai-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(42,157,74,0.15);border:1px solid var(--success);color:var(--success);padding:6px 12px;font-size:8px;letter-spacing:1px;margin-bottom:20px}
+.ai-badge::before{content:'✦';font-size:10px}
+
+/* FEATURES */
+.features{padding:100px 40px;max-width:1000px;margin:0 auto}
+.section-label{font-size:8px;letter-spacing:4px;color:var(--accent);text-transform:uppercase;margin-bottom:12px}
+.section-title{font-family:'Montserrat',sans-serif;font-weight:900;font-size:32px;color:#e8e4dc;margin-bottom:40px;letter-spacing:-1px}
+.feature-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:24px}
+.feature{padding:24px;border:1px solid #1e1e20;background:#0c0c0e}
+.feature-icon{font-size:20px;margin-bottom:12px}
+.feature h3{font-size:12px;font-weight:700;letter-spacing:1px;color:#e8e4dc;margin-bottom:8px;text-transform:uppercase}
+.feature p{font-size:10px;color:var(--dim);line-height:1.7}
+.feature-new{color:var(--success);font-size:7px;letter-spacing:1px;margin-left:6px}
+
+/* WORKFLOW */
+.workflow{padding:100px 40px;max-width:1000px;margin:0 auto}
+.workflow-steps{display:flex;gap:20px;flex-wrap:wrap;justify-content:center}
+.workflow-step{flex:1;min-width:200px;max-width:240px;text-align:center;padding:24px;border:1px solid #1e1e20;background:#0c0c0e;position:relative}
+.step-num{font-family:'Montserrat',sans-serif;font-weight:900;font-size:32px;color:var(--accent);margin-bottom:8px}
+.step-title{font-size:11px;font-weight:700;letter-spacing:1px;color:#e8e4dc;margin-bottom:8px;text-transform:uppercase}
+.step-desc{font-size:9px;color:var(--dim);line-height:1.7}
+.step-ai{position:absolute;top:-8px;right:-8px;background:var(--success);color:#fff;padding:3px 8px;font-size:7px;font-weight:700}
+
+/* PREVIEW SECTION */
+.preview{padding:80px 40px;max-width:1100px;margin:0 auto;text-align:center}
+.preview-title{font-family:'Montserrat',sans-serif;font-weight:900;font-size:24px;color:#e8e4dc;margin-bottom:16px}
+.preview-desc{font-size:11px;color:var(--dim);max-width:600px;margin:0 auto 30px;line-height:1.7}
+.preview-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;max-width:800px;margin:0 auto}
+.preview-card{background:#0c0c0e;border:1px solid #1e1e20;padding:20px;text-align:center}
+.preview-card-icon{font-size:24px;margin-bottom:10px}
+.preview-card h4{font-size:10px;color:#e8e4dc;letter-spacing:1px;margin-bottom:6px}
+.preview-card p{font-size:8px;color:var(--dim);line-height:1.6}
+
+/* MODELS */
+.models{padding:100px 40px;max-width:800px;margin:0 auto;text-align:center}
+.model-logos{display:flex;gap:30px;justify-content:center;flex-wrap:wrap;margin-top:30px}
+.model-logo{padding:16px 24px;border:1px solid #1e1e20;background:#0c0c0e;font-size:11px;font-weight:700;letter-spacing:1px;color:#888}
+.model-logo:hover{border-color:var(--accent);color:#e8e4dc}
+
+/* FOOTER */
+.footer{padding:40px;text-align:center;border-top:1px solid #1e1e20;font-size:9px;color:var(--dim);letter-spacing:1px}
+.footer a{color:var(--accent)}
+.divider{width:60px;height:1px;background:#333;margin:60px auto}
+
+/* DESKTOP NOTE */
+.desktop-note{display:none;background:#1a1a1c;border:1px solid var(--accent);padding:12px 20px;margin:10px 20px 0;text-align:center;font-size:9px;color:var(--dim);line-height:1.6}
+.desktop-note b{color:var(--accent)}
+
+/* MOBILE */
+@media(max-width:768px){
+  .hero{padding:30px 16px;min-height:90vh}
+  .hero-title{letter-spacing:-2px;margin-bottom:16px}
+  .hero-sub{font-size:12px;line-height:1.7;margin-bottom:30px}
+  .hero-cta{flex-direction:column;width:100%;padding:0 20px}
+  .btn-primary,.btn-secondary{width:100%;text-align:center;padding:14px 20px;font-size:12px}
+  .hero-stats{gap:24px;margin-top:40px}
+  .stat-num{font-size:22px}
+  .features,.workflow,.models,.preview{padding:60px 20px}
+  .section-title,.preview-title{font-size:24px;margin-bottom:24px}
+  .feature-grid{grid-template-columns:1fr;gap:16px}
+  .feature{padding:18px}
+  .workflow-steps{flex-direction:column;align-items:center}
+  .workflow-step{max-width:100%;width:100%}
+  .preview-grid{grid-template-columns:1fr;gap:12px}
+  .footer{padding:30px 20px}
+  .divider{margin:40px auto}
+  .desktop-note{display:block}
+}
+</style>
+</head>
+<body>
+
+<section class="hero">
+  <div class="hero-badge">▶ in-no-v8 presents</div>
+  <div class="ai-badge">Gemini AI Powered</div>
+  <h1 class="hero-title"><span>A-</span>CAM</h1>
+  <p class="hero-sub">Visual Director for AI video generation. Real-time storyboard previews, scene compositing with background plates, and Gemini-powered prompt engineering — all before you hit render.</p>
+  <div class="hero-cta">
+    <a href="app.html" class="btn-primary">Launch Director's Interface</a>
+    <a href="https://in-no-v8.com/guide/index.html" target="_blank" rel="noopener noreferrer" class="btn-secondary">How It Works</a>
+  </div>
+  <div class="desktop-note">
+    <b>▶ Desktop recommended</b> — A-CAM's interface requires a desktop browser for precise cinematography controls.
+  </div>
+  <div class="hero-stats">
+    <div class="stat"><div class="stat-num">10</div><div class="stat-label">Lenses</div></div>
+    <div class="stat"><div class="stat-num">13</div><div class="stat-label">Movements</div></div>
+    <div class="stat"><div class="stat-num">∞</div><div class="stat-label">Scenes</div></div>
+    <div class="stat"><div class="stat-num">✦</div><div class="stat-label">AI Analysis</div></div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- NEW: VISUAL PREVIEW SECTION -->
+<section class="preview">
+  <div class="section-label">▶ Visual Director Engine</div>
+  <div class="preview-title">See your shot before you render</div>
+  <p class="preview-desc">A-CAM generates real-time storyboard previews using edge-detection sketch rendering. Upload a background plate to see your character composited into the scene.</p>
+  <div class="preview-grid">
+    <div class="preview-card">
+      <div class="preview-card-icon">✏️</div>
+      <h4>Director's Sketch</h4>
+      <p>Edge-detection rendering converts your subject into a professional storyboard sketch. Studio backgrounds are automatically suppressed.</p>
+    </div>
+    <div class="preview-card">
+      <div class="preview-card-icon">🎬</div>
+      <h4>Scene Compositing</h4>
+      <p>Upload a background plate to preview your character in the scene. DOF blur automatically applied based on aperture setting.</p>
+    </div>
+    <div class="preview-card">
+      <div class="preview-card-icon">▶</div>
+      <h4>Movement Preview</h4>
+      <p>Start and End frames show the actual camera movement — dolly push-in, crane up, orbital arc — with proper parallax.</p>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<section class="features">
+  <div class="section-label">▶ Features</div>
+  <h2 class="section-title">Think like a cinematographer</h2>
+  <div class="feature-grid">
+    <div class="feature">
+      <div class="feature-icon">✦</div>
+      <h3>Gemini AI Analysis <span class="feature-new">NEW</span></h3>
+      <p>Upload your character and let Gemini analyze the subject, suppress the studio background, and generate optimized prompts for your target scene.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🎬</div>
+      <h3>Scene Compositing <span class="feature-new">NEW</span></h3>
+      <p>Upload a background plate and see your character composited in real-time. Depth of field blur applied to background based on aperture.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">◎</div>
+      <h3>Lens Profiles <span class="feature-new">UPGRADED</span></h3>
+      <p>8mm Fisheye to 135mm telephoto, including Anamorphic cinema lenses. Barrel distortion, oval bokeh, horizontal lens flares — all rendered in preview.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">⬡</div>
+      <h3>Shot Angles</h3>
+      <p>Eye level, low angle, high angle, dutch tilt, bird's eye, worm's eye. Each carries mood and power dynamics metadata.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">▶</div>
+      <h3>Camera Movements <span class="feature-new">UPGRADED</span></h3>
+      <p>Dolly, pan, tilt, orbital, crane, Snorricam body-cam, Dutch Roll with skew. Start/End frames show movement with parallax.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🌫️</div>
+      <h3>Atmospheric Haze <span class="feature-new">NEW</span></h3>
+      <p>Z-depth fog control from clear to dense. Warm smoke, cool mist, neutral fog presets. Distance increases haze for pull-out shots.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">◈</div>
+      <h3>Depth of Field</h3>
+      <p>f/1.4 razor-thin focus to f/11 deep focus. Aperture affects background blur in composite preview and bokeh keywords in prompt.</p>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<section class="workflow" id="workflow">
+  <div class="section-label">▶ Workflow</div>
+  <h2 class="section-title">From image to video prompt</h2>
+  <div class="workflow-steps">
+    <div class="workflow-step">
+      <div class="step-num">1</div>
+      <div class="step-title">Upload</div>
+      <div class="step-desc">Drop your hero image — character art, product shot, any subject on a studio background.</div>
+    </div>
+    <div class="workflow-step">
+      <div class="step-ai">AI</div>
+      <div class="step-num">2</div>
+      <div class="step-title">Analyze</div>
+      <div class="step-desc">Gemini analyzes your subject, suppresses the studio background, and prepares the scene description.</div>
+    </div>
+    <div class="workflow-step">
+      <div class="step-num">3</div>
+      <div class="step-title">Direct</div>
+      <div class="step-desc">Choose lens, angle, movement. Upload a background plate to composite your character into the scene.</div>
+    </div>
+    <div class="workflow-step">
+      <div class="step-num">4</div>
+      <div class="step-title">Export</div>
+      <div class="step-desc">Copy the technical prompt optimized for your target video model, or save the storyboard.</div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<section class="models">
+  <div class="section-label">▶ Supported Models</div>
+  <h2 class="section-title">Prompts optimized for</h2>
+  <div class="model-logos">
+    <div class="model-logo">VEO 3</div>
+    <div class="model-logo">RUNWAY GEN-3</div>
+    <div class="model-logo">KLING 1.6</div>
+    <div class="model-logo">PIKA 2.0</div>
+    <div class="model-logo">MINIMAX</div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<footer class="footer">
+  <p style="margin-bottom:8px">▶ A-CAM by <a href="https://www.in-no-v8.com">in-no-v8</a></p>
+  <p style="margin-bottom:12px">Part of the IN-NO-V8 Creative Suite</p>
+  <p style="color:#333;font-size:7px;max-width:600px;margin:0 auto;line-height:1.8">A-CAM generates storyboard previews and text prompts. Video generation requires separate access to the target AI video platforms. Scene compositing is for visualization only — final video rendering happens in your chosen AI platform.</p>
+</footer>
+
+<script data-goatcounter="https://innov8.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+</body>
+</html>

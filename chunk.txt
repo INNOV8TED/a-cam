@@ -1,0 +1,11 @@
+click="setSunDirection('east')">← East (AM)</button>
+            <button class="chip" id="sunWest" onclick="setSunDirection('west')">West (PM) →</button>
+          </div>
+        </div>
+
+        <!-- Depth of Field -->
+        <div class="control-group">
+          <div class="control-label">Depth of Field <span class="control-value" id="dofValue">f/4.0</span></div>
+          <div class="control-row">
+            <select class="sel" id="dofSelect" onchange="updateDOF()">
+              <option value="f/1.4 Razo

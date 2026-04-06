@@ -1,0 +1,100 @@
+// RESIZABLE PANELS
+// ═══════════════════════════════════════════════════════════════════════════
+let resizing = null;
+
+function startResize(e, panelId, dimension, edge = 'right') {
+  e.preventDefault();
+  resizing = { panelId, dimension, edge, startX: e.clientX, startY: e.clientY };
+  const panel = document.getElementById(panelId);
+  resizing.startWidth = panel.offsetWidth;
+  resizing.startHeight = panel.offsetHeight;
+  document.addEventListener('mousemove', doResize);
+  document.addEventListener('mouseup', stopResize);
+  document.body.style.cursor = dimension === 'width' ? 'ew-resize' : 'ns-resize';
+  document.body.style.userSelect = 'none';
+}
+
+function doResize(e) {
+  if (!resizing) return;
+  const panel = document.getElementById(resizing.panelId);
+  if (resizing.dimension === 'width') {
+    let diff = e.clientX - resizing.startX;
+    // Invert for left-edge resize (dragging left = wider)
+    if (resizing.edge === 'left') diff = -diff;
+    const newWidth = Math.max(150, Math.min(500, resizing.startWidth + diff));
+    panel.style.width = newWidth + 'px';
+  } else {
+    const diff = e.clientY - resizing.startY;
+    const newHeight = Math.max(120, Math.min(500, resizing.startHeight + diff));
+    panel.style.height = newHeight + 'px';
+  }
+  // Trigger canvas resize
+  renderFrames();
+}
+
+function stopResize() {
+  if (resizing) {
+    saveLayout();
+    resizing = null;
+  }
+  document.removeEventListener('mousemove', doResize);
+  document.removeEventListener('mouseup', stopResize);
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
+}
+
+function toggleSection(header) {
+  header.classList.toggle('collapsed');
+  saveLayout();
+}
+
+function saveLayout() {
+  const layout = {
+    inputWidth: document.getElementById('inputPanel')?.offsetWidth,
+    topSectionHeight: document.getElementById('topSection')?.offsetHeight,
+    controlsWidth: document.getElementById('controlsPanel')?.offsetWidth,
+    collapsedSections: []
+  };
+  document.querySelectorAll('.section-header.collapsed').forEach(h => {
+    layout.collapsedSections.push(h.parentElement.id);
+  });
+  localStorage.setItem('acam-layout', JSON.stringify(layout));
+}
+
+function loadLayout() {
+  try {
+    const saved = localStorage.getItem('acam-layout');
+    if (!saved) return;
+    const layout = JSON.parse(saved);
+    if (layout.inputWidth) {
+      document.getElementById('inputPanel').style.width = layout.inputWidth + 'px';
+    }
+    if (layout.topSectionHeight) {
+      document.getElementById('topSection').style.height = layout.topSectionHeight + 'px';
+    }
+    if (layout.controlsWidth) {
+      document.getElementById('controlsPanel').style.width = layout.controlsWidth + 'px';
+    }
+    if (layout.collapsedSections) {
+      layout.collapsedSections.forEach(id => {
+        const panel = document.getElementById(id);
+        if (panel) {
+          const header = panel.querySelector('.section-header');
+          if (header) header.classList.add('collapsed');
+        }
+      });
+    }
+  } catch (e) {
+    console.log('Layout load error:', e);
+  }
+}
+
+function resetLayout() {
+  localStorage.removeItem('acam-layout');
+  document.getElementById('inputPanel').style.width = '220px';
+  document.getElementById('topSection').style.height = '240px';
+  document.getElementById('controlsPanel').style.width = '280px';
+  document.querySelectorAll('.section-header.collapsed').forEach(h => {
+    h.classList.remove('collapsed');
+  });
+  showToast('Layout reset');

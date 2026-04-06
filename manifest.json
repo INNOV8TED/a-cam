@@ -1,0 +1,23 @@
+{
+  "name": "A-CAM Visual Director",
+  "short_name": "A-CAM",
+  "start_url": "./app.html",
+  "display": "standalone",
+  "background_color": "#0a0a0c",
+  "theme_color": "#cc3333",
+  "icons": [
+    {
+      "src": "acam-file.ico",
+      "sizes": "256x256",
+      "type": "image/x-icon"
+    }
+  ],
+  "file_handlers": [
+    {
+      "action": "./app.html",
+      "accept": {
+        "application/x-acam": [".acam"]
+      }
+    }
+  ]
+}
