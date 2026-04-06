@@ -211,6 +211,11 @@ function applyEffect(canvas, img, variation = {}) {
   if (charScaleMult > 1.0) {
     const shiftFactor = (charScaleMult - 1.0) * 0.5; // Shift down slightly as we zoom
     adjustedFeetY += (charH * shiftFactor);
+  } else if (charScaleMult < 1.0) {
+    // 🔥 NEW: Center compensation for Dolly Pull Out
+    // When subject gets smaller, we pull them UP towards the center
+    const liftFactor = (1.0 - charScaleMult) * 0.45;
+    adjustedFeetY -= (charH * liftFactor);
   }
 
   ctx.save();
@@ -269,7 +274,7 @@ function applyEffect(canvas, img, variation = {}) {
         totalBlur = Math.max(totalBlur, currentRack * 20); // Pull to FG
       } else {
         totalBlur = Math.max(0, totalBlur + (currentRack * totalBlur)); // Pull to BG
-        fgBlur = Math.abs(currentRack) * 15;
+        fgBlur = Math.abs(currentRack) * 8.5; // Reduced from 15 to stay blurry/visible
       }
     }
     settings.calculatedFgBlur = fgBlur;
@@ -340,14 +345,14 @@ function applyEffect(canvas, img, variation = {}) {
       const centerX = w / 2;
       const centerY = h / 2;
       ctx.save();
-      ctx.globalAlpha = 0.8; // More visible
+      ctx.globalAlpha = 0.25; // 🔥 NEW: Lowered to 0.25 (Subtle)
       ctx.strokeStyle = '#ffffff';
       
-      const lineCount = S.movementIntensity > 90 ? 120 : 80;
+      const lineCount = S.movementIntensity > 90 ? 55 : 35; // 🔥 NEW: Lowered density
       for (let i = 0; i < lineCount; i++) {
-        ctx.lineWidth = Math.random() * 3 + 1;
+        ctx.lineWidth = Math.random() * 2 + 0.5;
         const angle = Math.random() * Math.PI * 2;
-        const innerRadius = (Math.random() * 0.4 + 0.3) * (h/2); 
+        const innerRadius = (Math.random() * 0.3 + 0.5) * (h/2); // 🔥 NEW: Starting further out
         const outerRadius = Math.max(w, h); 
         ctx.beginPath();
         ctx.moveTo(centerX + Math.cos(angle) * innerRadius, centerY + Math.sin(angle) * innerRadius);

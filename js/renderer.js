@@ -1862,7 +1862,7 @@ function drawCharacterWithShadow(ctx, img, x, y, width, height, timeOfDay, light
     let shadowBlur = height * 0.04;    // 4% of height for standard soft shadow
     let shadowOffset = height * 0.05;  // 🔥 NEW: 5% of height - Lowered for tight foot anchoring
     let shadowOpacity = 0.7; 
-    let horizontalNudge = width * 0.05; // 🔥 NEW: Horizontal nudge for better base anchoring
+    let horizontalNudge = width * -0.05; // 🔥 NEW: Negative shift (Left) for better grounding
     let lightAngle = 0;   
     let shadowLength = 0; 
     
@@ -2450,6 +2450,10 @@ function renderExportFrame(canvas, img, settings) {
   if (charZoomScale > 1.0) {
     const shiftFactor = (charZoomScale - 1.0) * 0.5;
     adjustedFeetY += (charH * shiftFactor);
+  } else if (charZoomScale < 1.0) {
+    // 🔥 NEW: Center compensation for Dolly Pull Out
+    const liftFactor = (1.0 - charZoomScale) * 0.45;
+    adjustedFeetY -= (charH * liftFactor);
   }
 
   ctx.save(); 
@@ -2501,7 +2505,7 @@ function renderExportFrame(canvas, img, settings) {
         totalBlur = Math.max(totalBlur, currentRack * 20); // Pull to FG
       } else {
         totalBlur = Math.max(0, totalBlur + (currentRack * totalBlur)); // Pull to BG
-        fgBlur = Math.abs(currentRack) * 15;
+        fgBlur = Math.abs(currentRack) * 8.5; // 🔥 NEW: Lowered for visibility
       }
     }
     settings.calculatedFgBlur = fgBlur;
@@ -2572,14 +2576,14 @@ function renderExportFrame(canvas, img, settings) {
       const centerX = w / 2;
       const centerY = h / 2;
       ctx.save();
-      ctx.globalAlpha = 0.8; // More visible
+      ctx.globalAlpha = 0.25; // 🔥 NEW: Lowered to 0.25 (Subtle)
       ctx.strokeStyle = '#ffffff';
       
-      const lineCount = S.movementIntensity > 90 ? 120 : 80;
+      const lineCount = S.movementIntensity > 90 ? 55 : 35; // 🔥 NEW: Lowered density
       for (let i = 0; i < lineCount; i++) {
-        ctx.lineWidth = Math.random() * 3 + 1;
+        ctx.lineWidth = Math.random() * 2 + 0.5;
         const angle = Math.random() * Math.PI * 2;
-        const innerRadius = (Math.random() * 0.4 + 0.3) * (h/2); 
+        const innerRadius = (Math.random() * 0.3 + 0.5) * (h/2); // 🔥 NEW: Starting further out
         const outerRadius = Math.max(w, h); 
         ctx.beginPath();
         ctx.moveTo(centerX + Math.cos(angle) * innerRadius, centerY + Math.sin(angle) * innerRadius);
