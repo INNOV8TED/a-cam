@@ -308,6 +308,20 @@ function applyEffect(canvas, img, variation = {}) {
     const charX = feetX - (pCanvas.width / 2) + (moveX * 1.4); 
     const charY = adjustedFeetY - finalCharH + moveY; 
 
+    // Apply Shutter Speed Effect (Slow Shutter = Motion Blur Trail)
+    const shutter = settings.shutterSpeed || S.shutterSpeed;
+    if (shutter === 'Slow' && settings.frameType === 'end') {
+        const blurCount = 4; // Fewer for performance in preview
+        const blurStepX = moveX * 0.05;
+        const blurStepY = moveY * 0.05;
+        ctx.save();
+        ctx.globalAlpha = 0.15;
+        for (let i = 1; i <= blurCount; i++) {
+            drawCharacterWithShadow(ctx, pCanvas, charX - (blurStepX * i), charY - (blurStepY * i), pCanvas.width, finalCharH, settings.timeOfDay ?? S.timeOfDay, settings.lighting || S.lighting);
+        }
+        ctx.restore();
+    }
+
     // Apply FG Blur from Rack Focus
     if (settings.calculatedFgBlur && settings.calculatedFgBlur > 0) {
         const blurCanvas = document.createElement('canvas');
@@ -376,6 +390,11 @@ function applyEffect(canvas, img, variation = {}) {
   applyLensOverlay(ctx, w, h, settings.lens || S.lens);
   drawOverlays(ctx, w, h);
   drawBadges(ctx, w, h, settings.frameType);
+
+  // 10. APPLY FILM STOCK EFFECTS (Grain, Scanlines, Tints)
+  if (typeof applyFilmEffects === 'function') {
+      applyFilmEffects(ctx, w, h, settings.filmStock || S.filmStock);
+  }
 }
 
 
@@ -1508,6 +1527,8 @@ function installPack(packData) {
           lightingIntensity: preset.lightingIntensity || 70,
           isIndoor: preset.isIndoor !== undefined ? preset.isIndoor : true,
           timeOfDay: preset.timeOfDay !== undefined ? preset.timeOfDay : 12,
+          shutterSpeed: preset.shutterSpeed || 'Standard',
+          filmStock: preset.filmStock || 'Clean Digital',
           desc: preset.description || preset.desc || "Imported Move"
         }
       });
@@ -1554,7 +1575,9 @@ async function exportCustomPack() {
     movementIntensity: preset.params.movementIntensity || 50,
     dof: preset.params.dof || "f/4.0 Balanced",
     lighting: preset.params.lighting || "Natural Ambient",
-    lightingIntensity: preset.params.lightingIntensity || 70
+    lightingIntensity: preset.params.lightingIntensity || 70,
+    shutterSpeed: preset.params.shutterSpeed || "Standard",
+    filmStock: preset.params.filmStock || "Clean Digital"
   }));
 
   // Construct the final .acam cartridge in new format
@@ -1685,6 +1708,21 @@ function applyDirectorPreset(name, isCustom = false) {
     S.lighting = data.lighting;
     document.getElementById('lightingSelect').value = data.lighting;
     document.getElementById('lightingValue').textContent = data.lighting.split(' ')[0];
+  }
+  if (data.shutterSpeed) {
+    S.shutterSpeed = data.shutterSpeed;
+    document.getElementById('shutterValue').textContent = data.shutterSpeed;
+    document.querySelectorAll('.shutter-chip').forEach(btn => {
+      btn.classList.toggle('active', btn.id === 'shutter' + data.shutterSpeed);
+    });
+  }
+  if (data.filmStock) {
+    S.filmStock = data.filmStock;
+    document.getElementById('filmSelect')?.setAttribute('value', data.filmStock); // Fallback if select exists
+    if (document.getElementById('filmStockSelect')) {
+        document.getElementById('filmStockSelect').value = data.filmStock;
+    }
+    document.getElementById('filmStockValue').textContent = data.filmStock;
   }
   
   renderStoryboard();

@@ -46,7 +46,9 @@ const S_internal = {
   // API Analysis State
   sceneAnalyzed: false,
   analysisDescription: '',
-  rackFocus: 0 // -100 to 100
+  rackFocus: 0, // -100 to 100
+  shutterSpeed: 'Standard', // Fast, Standard, Slow
+  filmStock: 'Clean Digital' // Clean Digital, 16mm Film, VHS, CCTV
 };
 
 

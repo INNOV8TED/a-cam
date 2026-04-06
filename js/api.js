@@ -108,7 +108,17 @@ async function pushToProduction() {
         let rackDesc = "";
         if (S.rackFocus > 0) rackDesc = "Cinematic rack focus pulling from the background into crisp foreground subject focus. ";
         else if (S.rackFocus < 0) rackDesc = "Cinematic rack focus pulling from subject into perfectly sharp background focus. ";
-        let finalPrompt = `CAMERA: ${cameraDesc}, ${angleDesc}, ${dofDesc}. ${rackDesc}`;
+        
+        let shutterPrompt = S.shutterSpeed === 'Fast' ? "Fast shutter speed, crisp motion, high action clarity. " 
+                         : S.shutterSpeed === 'Slow' ? "Slow shutter speed, cinematic motion blur, dreamlike trails. " 
+                         : "Standard 180-degree shutter. ";
+                         
+        let stockPrompt = S.filmStock === '16mm Film' ? "Shot on 16mm textured film, vintage grain, warm color grade. " 
+                        : S.filmStock === 'VHS' ? "VHS tape quality, analog glitches, tracking errors, low fidelity. " 
+                        : S.filmStock === 'CCTV' ? "CCTV security camera footage, green night vision tint, low resolution scanlines. " 
+                        : "Modern clean digital sensor. ";
+
+        let finalPrompt = `CAMERA: ${cameraDesc}, ${angleDesc}, ${dofDesc}. ${shutterPrompt}${stockPrompt}${rackDesc}`;
         
         finalPrompt += `SUBJECT: A person ${positionDesc}, wearing ${outfitDesc || 'standard clothing'}. `;
         

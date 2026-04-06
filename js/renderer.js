@@ -268,6 +268,8 @@ const DIRECTOR_PRESETS = {
     movement: 'Dolly Zoom',
     movementIntensity: 85,
     dof: 'f/2.8 Controlled',
+    shutterSpeed: 'Standard',
+    filmStock: '16mm Film',
     icon: '🦈'
   },
   'The Bay': {
@@ -277,6 +279,8 @@ const DIRECTOR_PRESETS = {
     movement: 'Orbital Arc',
     movementIntensity: 80,
     dof: 'f/4.0 Balanced',
+    shutterSpeed: 'Fast',
+    filmStock: 'Clean Digital',
     icon: '🚁'
   },
   'The Wes': {
@@ -287,6 +291,8 @@ const DIRECTOR_PRESETS = {
     movementIntensity: 70,
     dof: 'f/5.6 Deep',
     lighting: 'Natural Ambient',
+    shutterSpeed: 'Standard',
+    filmStock: 'Clean Digital',
     icon: '🎭'
   },
   'The Hitchcock': {
@@ -297,6 +303,8 @@ const DIRECTOR_PRESETS = {
     movementIntensity: 75,
     dof: 'f/2.8 Controlled',
     lighting: 'Hard Shadow Noir',
+    shutterSpeed: 'Standard',
+    filmStock: '16mm Film',
     icon: '🔪'
   },
   'The Snyder': {
@@ -306,6 +314,8 @@ const DIRECTOR_PRESETS = {
     movement: 'Zoom In',
     movementIntensity: 90,
     dof: 'f/2.0 Smooth',
+    shutterSpeed: 'Fast',
+    filmStock: 'Clean Digital',
     icon: '⚡'
   },
   'The Fincher': {
@@ -316,6 +326,8 @@ const DIRECTOR_PRESETS = {
     movementIntensity: 60,
     dof: 'f/4.0 Balanced',
     lighting: 'Hard Shadow Noir',
+    shutterSpeed: 'Standard',
+    filmStock: 'Clean Digital',
     icon: '🎬'
   }
 };
@@ -400,6 +412,22 @@ function updateLightingIntensity() {
 function updateDOF() {
   S.dof = document.getElementById('dofSelect').value;
   document.getElementById('dofValue').textContent = S.dof.split(' ')[0];
+  updateAll();
+}
+
+function setShutterSpeed(speed) {
+  S.shutterSpeed = speed;
+  document.getElementById('shutterValue').textContent = speed;
+  // Update chip active states
+  document.querySelectorAll('.shutter-chip').forEach(btn => {
+    btn.classList.toggle('active', btn.id === 'shutter' + speed);
+  });
+  updateAll();
+}
+
+function updateFilmStock() {
+  S.filmStock = document.getElementById('filmStockSelect').value;
+  document.getElementById('filmStockValue').textContent = S.filmStock;
   updateAll();
 }
 
@@ -2585,6 +2613,20 @@ function renderExportFrame(canvas, img, settings) {
     const finalCharX = feetX - (finalCharW / 2) + (moveX * 1.4);
     const finalCharY = adjustedFeetY - finalCharH + moveY;
     
+    // Apply Shutter Speed Effect (Slow Shutter = Motion Blur Trail)
+    const shutter = settings.shutterSpeed || S.shutterSpeed;
+    if (shutter === 'Slow' && settings.frameType === 'end') {
+        const blurCount = 5;
+        const blurStepX = moveX * 0.05;
+        const blurStepY = moveY * 0.05;
+        ctx.save();
+        ctx.globalAlpha = 0.2;
+        for (let i = 1; i <= blurCount; i++) {
+            drawCharacterWithShadow(ctx, charCanvas, finalCharX - (blurStepX * i), finalCharY - (blurStepY * i), finalCharW, finalCharH, settings.timeOfDay ?? S.timeOfDay, settings.lighting || S.lighting);
+        }
+        ctx.restore();
+    }
+
     // Apply FG Blur from Rack Focus
     if (settings.calculatedFgBlur && settings.calculatedFgBlur > 0) {
         const blurCanvas = document.createElement('canvas');
@@ -2639,6 +2681,67 @@ function renderExportFrame(canvas, img, settings) {
   applyLightingOverlay(ctx, w, h, settings.lighting || S.lighting, settings.lightingIntensity ?? S.lightingIntensity);
   
   if (S.showVignette) applyVignette(ctx, 0, 0, w, h, 65);
+
+  // 6. APPLY FILM STOCK EFFECTS (Grain, Scanlines, Tints)
+  applyFilmEffects(ctx, w, h, settings.filmStock || S.filmStock);
+}
+
+function applyFilmEffects(ctx, w, h, stock) {
+  if (!stock || stock === 'Clean Digital') return;
+
+  ctx.save();
+  
+  if (stock === '16mm Film') {
+    // 16mm: Warm tint + Texture
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.fillStyle = 'rgba(255, 200, 150, 0.15)';
+    ctx.fillRect(0, 0, w, h);
+    
+    // Add Grain
+    ctx.globalCompositeOperation = 'screen';
+    ctx.globalAlpha = 0.1;
+    for (let i = 0; i < 5000; i++) {
+      const x = Math.random() * w;
+      const y = Math.random() * h;
+      const s = Math.random() * 2;
+      ctx.fillStyle = Math.random() > 0.5 ? '#fff' : '#000';
+      ctx.fillRect(x, y, s, s);
+    }
+  } else if (stock === 'VHS') {
+    // VHS: Scanlines + Slight color shift
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < h; i += 4) {
+      ctx.beginPath();
+      ctx.moveTo(0, i);
+      ctx.lineTo(w, i);
+      ctx.stroke();
+    }
+    
+    // Color Bleed (slight red shift)
+    ctx.globalCompositeOperation = 'screen';
+    ctx.globalAlpha = 0.1;
+    ctx.fillStyle = 'rgba(255, 0, 0, 0.15)';
+    ctx.fillRect(2, 0, w, h);
+  } else if (stock === 'CCTV') {
+    // CCTV: Greenish Tint + Low Res Scanlines
+    ctx.globalCompositeOperation = 'color';
+    ctx.fillStyle = 'rgba(100, 255, 150, 0.3)';
+    ctx.fillRect(0, 0, w, h);
+    
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+    ctx.lineWidth = 2;
+    for (let i = 0; i < h; i += 6) {
+      ctx.beginPath();
+      ctx.moveTo(0, i);
+      ctx.lineTo(w, i);
+      ctx.stroke();
+    }
+  }
+  
+  ctx.restore();
 }
 
 function resetAll() {

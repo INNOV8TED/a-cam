@@ -285,6 +285,29 @@
           </div>
         </div>
 
+        <!-- Shutter Speed -->
+        <div class="control-group">
+          <div class="control-label">Shutter Speed <span class="control-value" id="shutterValue">Standard</span></div>
+          <div class="control-row">
+            <button class="chip shutter-chip" id="shutterFast" onclick="setShutterSpeed('Fast')">Fast</button>
+            <button class="chip shutter-chip active" id="shutterStandard" onclick="setShutterSpeed('Standard')">Standard</button>
+            <button class="chip shutter-chip" id="shutterSlow" onclick="setShutterSpeed('Slow')">Slow</button>
+          </div>
+        </div>
+
+        <!-- Film Stock -->
+        <div class="control-group">
+          <div class="control-label">Film Stock <span class="control-value" id="filmStockValue">Clean Digital</span></div>
+          <div class="control-row">
+            <select class="sel" id="filmStockSelect" onchange="updateFilmStock()">
+              <option value="Clean Digital" selected>Clean Digital</option>
+              <option value="16mm Film">16mm Film</option>
+              <option value="VHS">VHS Tape</option>
+              <option value="CCTV">CCTV Security</option>
+            </select>
+          </div>
+        </div>
+
         <!-- Time of Day (Outdoor only) -->
         <div class="control-group" id="timeGroup">
           <div class="control-label">Time of Day <span class="control-value" id="timeValue">12:00</span></div>
