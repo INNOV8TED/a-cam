@@ -1,5 +1,11 @@
 // === THE NATIVE PRODUCTION ENGINE (NO SDK REQUIRED) ===
 
+const MODELS = {
+    'Kling': { endpoint: 'fal-ai/kling-video/v1.6/standard/image-to-video' },
+    'Runway': { endpoint: 'fal-ai/runway-gen3/alpha/image-to-video' },
+    'Veo': { endpoint: 'fal-ai/veo/video' }
+};
+
 /**
  * THE RENDER EXPORT ENGINE
  * Packages prompt, camera math, and optics into the Fal.ai JSON payload
