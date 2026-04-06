@@ -1,4 +1,3 @@
-
 // ═══════════════════════════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════════════════════════
@@ -17,7 +16,7 @@ const S_internal = {
   timeOfDay: 12, // 0-24 hours
   sunDirection: 'east',
   dof: 'f/8.0 Sharp',  // Changed from Cinematic so background is visible
-  targetModel: 'Veo 3',
+  targetModel: 'Veo',
   activeStoryboard: 0,
   activePreset: null,        // Current director preset
   aspectRatio: '16:9',

@@ -616,7 +616,7 @@ function generatePrompt() {
     ...angle.keywords.slice(0, 2),
     ...dof.keywords.slice(0, 1),
     ...lighting.keywords.slice(0, 2),
-    ...model.tags
+    ...(model && model.tags ? model.tags : [])
   ];
   
   // Add special lens type keywords
