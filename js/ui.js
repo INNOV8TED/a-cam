@@ -168,6 +168,15 @@ function getAspectDimensions(containerW, containerH) {
   return { w: Math.floor(w), h: Math.floor(h) };
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// RENDERING UTILITIES
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Background removal logic moved to renderer.js for better consolidation and thresholding
+
+
+// drawCharacterWithShadow moved to renderer.js for advanced visual fidelity
+
 function applyEffect(canvas, img, variation = {}) {
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   const settings = { ...S, ...variation };
@@ -203,6 +212,8 @@ function applyEffect(canvas, img, variation = {}) {
   // MOTION INPUTS
   const moveX = (settings.bgPanOffset || 0) * w;
   const moveY = (settings.bgTiltOffset || 0) * h;
+  const charMoveX = (settings.charPanOffset || 0) * w;
+  const charMoveY = (settings.charTiltOffset || 0) * h;
   const bgScale = settings.bgScale || 1.0;
   const charScaleMult = settings.charScale || 1.0;
 
@@ -218,14 +229,9 @@ function applyEffect(canvas, img, variation = {}) {
     adjustedFeetY -= (charH * liftFactor);
   }
 
-  // 🔥 NEW: SUBJECT MICRO-MOTION (BREATHING)
-  // Subtle 2px sway + tiny scale oscillation to simulate life
-  const breatheTime = Date.now() / 1200;
-  const breathingOffset = Math.sin(breatheTime) * 1.5; 
-  const breathingScale = 1.0 + (Math.cos(breatheTime) * 0.004); 
-  
-  adjustedFeetY += breathingOffset;
-  const finalCharScale = charScaleMult * breathingScale;
+  // 🔥 NEW: ORGANIC HANDHELD DRIFT
+  // Drift values are now managed by startMotionEngine loop in S
+  const finalCharScale = charScaleMult;
 
   ctx.save();
   
@@ -252,23 +258,34 @@ function applyEffect(canvas, img, variation = {}) {
       bgW = w * finalOverscan; bgH = bgW / bgRatio;
     }
 
-    const currentLens = parseInt(settings.lens || S.lens || '50'); 
-    let opticalZoom = currentLens <= 15 ? 0.65 : (currentLens <= 24 ? 0.80 : 1.0);
+    const lensName = settings.lens || S.lens || '50mm Normal';
+    const currentLens = parseInt(lensName) || 50; 
+    let opticalZoom = 1.0;
+    if (currentLens <= 10) opticalZoom = 0.55;       // 8mm Fisheye
+    else if (currentLens <= 15) opticalZoom = 0.70;  // 15mm Ultra
+    else if (currentLens <= 24) opticalZoom = 0.82;  // 24mm Wide
+    else if (currentLens <= 35) opticalZoom = 0.92;  // 35mm Standard
+    else if (currentLens <= 50) opticalZoom = 1.05;  // 50mm Normal
+    else if (currentLens <= 85) opticalZoom = 1.35;  // 85mm Portrait
+    else if (currentLens >= 135) opticalZoom = 1.65; // 135mm Tele
     
-    const finalBgW = bgW * bgScale * opticalZoom;
-    const finalBgH = bgH * bgScale * opticalZoom;
+    const scaledBgW = bgW * bgScale * opticalZoom;
+    const scaledBgH = bgH * bgScale * opticalZoom;
     
-    const bgGroundX = finalBgW / 2;
+    const bgGroundX = scaledBgW / 2;
     const focusPlaneY = settings.groundPlaneY || S.groundPlaneY || 0.85;
-    const bgGroundY = finalBgH * focusPlaneY;
+    const bgGroundY = scaledBgH * focusPlaneY;
     
     const curAngle = settings.angle || S.angle;
     let angleShiftY = 0;
-    if (curAngle === "Worm's Eye") angleShiftY = finalBgH * 0.25;
-    else if (curAngle === "High Angle") angleShiftY = -finalBgH * 0.12;
+    if (curAngle === "Worm's Eye") angleShiftY = scaledBgH * 0.25;
+    else if (curAngle === "High Angle") angleShiftY = -scaledBgH * 0.12;
 
     const bgX = feetX - bgGroundX + moveX;
     const bgY = adjustedFeetY - bgGroundY + moveY + angleShiftY;
+    
+    // We already handled zoom/scale in scaledBgW calculation.
+    // Distortion removed per user request.
     
     // 🔥 NEW: CALL THE GRADIENT DEPTH ENGINE
     let totalBlur = getBlurAmount(settings.dof || S.dof) * 1.5;
@@ -292,59 +309,61 @@ function applyEffect(canvas, img, variation = {}) {
     // Get just the color filter without the blur (blur is handled by the DOF engine)
     const timeFilter = getEnvironmentFilter(settings.timeOfDay ?? S.timeOfDay, settings.isIndoor ?? S.isIndoor, 0);
     
-    drawBackgroundWithSimpleDOF(ctx, S.backgroundPlate, bgX, bgY, finalBgW, finalBgH, focusPlaneY, totalBlur, timeFilter, settings.dutchAngle || 0);
+    drawBackgroundWithSimpleDOF(ctx, S.backgroundPlate, bgX, bgY, scaledBgW, scaledBgH, focusPlaneY, totalBlur, timeFilter, settings.dutchAngle || 0);
+  }
 
-    // 5. CHARACTER LAYER (The Actor)
-    const finalCharW = charW * finalCharScale;
-    const finalCharH = charH * finalCharScale;
-    
-    const charCanvas = document.createElement('canvas');
-    charCanvas.width = Math.ceil(finalCharW); charCanvas.height = Math.ceil(finalCharH);
-    const charCtx = charCanvas.getContext('2d');
-    charCtx.drawImage(img, 0, 0, finalCharW, finalCharH);
-    removeStudioBackground(charCtx, charCanvas);
-    
-    let topP = 1.0, botP = 1.0;
-    if (curAngle === "Worm's Eye") { topP = 0.82; botP = 1.18; }
-    else if (curAngle === "High Angle") { topP = 1.08; botP = 0.92; }
+  // 5. CHARACTER LAYER (The Actor) - ALWAYS PROCESS
+  const finalCharW = charW * finalCharScale;
+  const finalCharH = charH * finalCharScale;
+  
+  const charCanvas = document.createElement('canvas');
+  charCanvas.width = Math.ceil(finalCharW); charCanvas.height = Math.ceil(finalCharH);
+  const charCtx = charCanvas.getContext('2d');
+  charCtx.drawImage(img, 0, 0, finalCharW, finalCharH);
+  removeStudioBackground(charCtx, charCanvas);
+  
+  const curAngle = settings.angle || S.angle;
+  let topP = 1.0, botP = 1.0;
+  if (curAngle === "Worm's Eye") { topP = 0.82; botP = 1.18; }
+  else if (curAngle === "High Angle") { topP = 1.08; botP = 0.92; }
 
-    const pCanvas = document.createElement('canvas');
-    pCanvas.width = finalCharW * 1.5; pCanvas.height = finalCharH;
-    drawPinchCharacter(pCanvas.getContext('2d'), charCanvas, (pCanvas.width - finalCharW)/2, 0, finalCharW, finalCharH, topP, botP);
+  const pCanvas = document.createElement('canvas');
+  pCanvas.width = finalCharW * 1.5; pCanvas.height = finalCharH;
+  drawPinchCharacter(pCanvas.getContext('2d'), charCanvas, (pCanvas.width - finalCharW)/2, 0, finalCharW, finalCharH, topP, botP);
 
-    // 🔥 FIX: 1.4x Parallax on Horizontal, 1.0x (Welded) on Vertical to stop sliding
-    const charX = feetX - (pCanvas.width / 2) + (moveX * 1.4); 
-    const charY = adjustedFeetY - finalCharH + moveY; 
+  const charX = feetX - (pCanvas.width / 2) + (moveX * 1.4) + charMoveX; 
+  const charY = adjustedFeetY - finalCharH + moveY + charMoveY; 
 
-    // Apply Shutter Speed Effect (Slow Shutter = Motion Blur Trail)
-    const shutter = settings.shutterSpeed || S.shutterSpeed;
-    if (shutter === 'Slow' && settings.frameType === 'end') {
-        const blurCount = 4; // Fewer for performance in preview
-        const blurStepX = moveX * 0.05;
-        const blurStepY = moveY * 0.05;
-        ctx.save();
-        ctx.globalAlpha = 0.15;
-        for (let i = 1; i <= blurCount; i++) {
-            drawCharacterWithShadow(ctx, pCanvas, charX - (blurStepX * i), charY - (blurStepY * i), pCanvas.width, finalCharH, settings.timeOfDay ?? S.timeOfDay, settings.lighting || S.lighting);
-        }
-        ctx.restore();
-    }
+  // Calculate common rendering parameters
+  const masterLighting = settings.lighting || S.lighting;
+  const masterTimeOfDay = settings.timeOfDay ?? S.timeOfDay;
+  const masterSunDirection = settings.sunDirection ?? S.sunDirection;
 
-    // Apply FG Blur from Rack Focus
-    if (settings.calculatedFgBlur && settings.calculatedFgBlur > 0) {
-        const blurCanvas = document.createElement('canvas');
-        blurCanvas.width = pCanvas.width;
-        blurCanvas.height = pCanvas.height;
-        const bctx = blurCanvas.getContext('2d');
-        bctx.filter = `blur(${settings.calculatedFgBlur}px)`;
-        bctx.drawImage(pCanvas, 0, 0);
-        drawCharacterWithShadow(ctx, blurCanvas, charX, charY, pCanvas.width, finalCharH, settings.timeOfDay ?? S.timeOfDay, settings.lighting || S.lighting);
-    } else {
-        drawCharacterWithShadow(ctx, pCanvas, charX, charY, pCanvas.width, finalCharH, settings.timeOfDay ?? S.timeOfDay, settings.lighting || S.lighting);
-    }
+  // Apply Shutter Speed Effect (Slow Shutter = Motion Blur Trail)
+  const shutter = settings.shutterSpeed || S.shutterSpeed;
+  if (shutter === 'Slow' && settings.frameType === 'end') {
+      const blurCount = 5;
+      const blurStepX = moveX * 0.05;
+      const blurStepY = moveY * 0.05;
+      ctx.save();
+      ctx.globalAlpha = 0.2;
+      for (let i = 1; i <= blurCount; i++) {
+          drawCharacterWithShadow(ctx, pCanvas, charX - (blurStepX * i), charY - (blurStepY * i), pCanvas.width, finalCharH, masterTimeOfDay, masterLighting, masterSunDirection);
+      }
+      ctx.restore();
+  }
 
+  // Draw Character with Shadow (using master renderer.js version)
+
+  if (settings.calculatedFgBlur && settings.calculatedFgBlur > 0) {
+      const blurCanvas = document.createElement('canvas');
+      blurCanvas.width = pCanvas.width; blurCanvas.height = pCanvas.height;
+      const bctx = blurCanvas.getContext('2d');
+      bctx.filter = `blur(${settings.calculatedFgBlur}px)`;
+      bctx.drawImage(pCanvas, 0, 0);
+      drawCharacterWithShadow(ctx, blurCanvas, charX, charY, pCanvas.width, finalCharH, masterTimeOfDay, masterLighting, masterSunDirection);
   } else {
-    renderSketchMode(ctx, img, w, h, feetX - charW/2, adjustedFeetY - charH, charW, charH);
+      drawCharacterWithShadow(ctx, pCanvas, charX, charY, pCanvas.width, finalCharH, masterTimeOfDay, masterLighting, masterSunDirection);
   }
 
   // 6. UN-TILT THE WORLD
@@ -582,46 +601,7 @@ function applyLensOverlay(ctx, w, h, lens) {
     ctx.fillRect(0, 0, w, h);
   }
   
-  // === ANAMORPHIC CINEMA EFFECTS ===
-  else if (lensData.type === 'anamorphic') {
-    // Horizontal blue lens flare (appears with bright areas)
-    if (S.lightingIntensity > 50) {
-      const flareIntensity = (S.lightingIntensity - 50) / 50 * 0.15;
-      const flareGrad = ctx.createLinearGradient(0, h * 0.45, w, h * 0.55);
-      flareGrad.addColorStop(0, 'transparent');
-      flareGrad.addColorStop(0.3, `rgba(100, 150, 255, ${flareIntensity})`);
-      flareGrad.addColorStop(0.5, `rgba(150, 200, 255, ${flareIntensity * 1.5})`);
-      flareGrad.addColorStop(0.7, `rgba(100, 150, 255, ${flareIntensity})`);
-      flareGrad.addColorStop(1, 'transparent');
-      ctx.fillStyle = flareGrad;
-      ctx.fillRect(0, h * 0.4, w, h * 0.2);
-    }
-    
-    // Anamorphic squeeze indicator lines
-    ctx.strokeStyle = 'rgba(100, 150, 255, 0.2)';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([4, 4]);
-    
-    // 2.39:1 frame guides
-    const anamorphicH = w / 2.39;
-    const letterboxY = (h - anamorphicH) / 2;
-    ctx.beginPath();
-    ctx.moveTo(0, letterboxY);
-    ctx.lineTo(w, letterboxY);
-    ctx.moveTo(0, h - letterboxY);
-    ctx.lineTo(w, h - letterboxY);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    
-    // Oval bokeh hint (subtle ellipse in corners)
-    ctx.strokeStyle = 'rgba(100, 150, 255, 0.15)';
-    ctx.beginPath();
-    ctx.ellipse(w * 0.1, h * 0.15, 15, 25, 0, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.ellipse(w * 0.9, h * 0.85, 15, 25, 0, 0, Math.PI * 2);
-    ctx.stroke();
-  }
+  // Anamorphic guides and flares now handled by master renderer optics engine
   
   // === STANDARD WIDE ANGLE ===
   else if (lens.includes('15mm') || lens.includes('24mm')) {
@@ -720,128 +700,47 @@ function renderSketchMode(ctx, img, w, h, dx, dy, drawW, drawH) {
         return (pixels[idx] * 0.299 + pixels[idx+1] * 0.587 + pixels[idx+2] * 0.114);
       };
       
-      const gx = -getL(-1,-1) + getL(1,-1) - 2*getL(-1,0) + 2*getL(1,0) - getL(-1,1) + getL(1,1);
-      const gy = -getL(-1,-1) - 2*getL(0,-1) - getL(1,-1) + getL(-1,1) + 2*getL(0,1) + getL(1,1);
-      const edge = Math.sqrt(gx*gx + gy*gy);
-      
-      if (edge > 25) {
-        const intensity = Math.min(255, edge * 2.5);
-        out[i] = Math.floor(200 * (intensity / 255));
-        out[i+1] = Math.floor(60 * (intensity / 255));
-        out[i+2] = Math.floor(60 * (intensity / 255));
-        out[i+3] = 255;
-      } else if (edge > 12) {
-        const intensity = Math.min(80, edge * 4);
-        out[i] = out[i+1] = out[i+2] = Math.floor(intensity);
-        out[i+3] = 255;
-      } else {
-        out[i] = 12; out[i+1] = 12; out[i+2] = 14;
-        out[i+3] = 255;
-      }
+      const val = Math.abs(getL(1, 0) - getL(-1, 0)) + Math.abs(getL(0, 1) - getL(0, -1));
+      const edge = val > 30 ? 255 : 0;
+      out[i] = out[i+1] = out[i+2] = edge;
+      out[i+3] = 255;
     }
   }
-  
   ctx.putImageData(output, 0, 0);
 }
 
 // === SEAMLESS OPTICAL DEPTH ENGINE ===
-function drawBackgroundWithSimpleDOF(ctx, bgImage, x, y, w, h, groundY, maxBlur, timeFilter, dutchAngle = 0) {
-  // If f/8.0 or f/11 (sharp) is selected, just draw the image normally
-  if (maxBlur <= 1) {
-    ctx.save();
-    ctx.filter = timeFilter || 'none';
-    ctx.drawImage(bgImage, x, y, w, h);
-    ctx.restore();
-    return;
-  }
-  
-  const canvasH = ctx.canvas.height;
-  const canvasW = ctx.canvas.width;
-  
-  // 1. BASE LAYER: Draw the sharp focus plane (bottom of frame)
-  ctx.save();
-  // We apply a tiny 15% atmosphere blur even to the "sharp" area for realism
-  const groundBlur = maxBlur * 0.15; 
-  ctx.filter = (timeFilter !== 'none') ? `${timeFilter} blur(${groundBlur}px)` : `blur(${groundBlur}px)`;
-  ctx.drawImage(bgImage, x, y, w, h);
-  ctx.restore();
-  
-  // 2. BLUR LAYER: Draw the heavy background blur on a temporary buffer
-  const blurCanvas = document.createElement('canvas');
-  blurCanvas.width = canvasW;
-  blurCanvas.height = canvasH;
-  const bCtx = blurCanvas.getContext('2d');
-  
-  bCtx.filter = (timeFilter !== 'none') ? `${timeFilter} blur(${maxBlur}px)` : `blur(${maxBlur}px)`;
-  bCtx.drawImage(bgImage, x, y, w, h);
-  
-  // 3. SEAMLESS GRADIENT MASK: Blends the blur out as it reaches the feet
-  bCtx.globalCompositeOperation = 'destination-in';
-  
-  // Calculate the ground line in pixels
-  const groundLineY = canvasH * groundY;
-  
-  // THREE ZONE LOGIC: 
-  // - Starts blurring 45% above the ground (Horizon/Far)
-  // - Completely sharp 5% below the ground (Character Feet)
-  const fadeStart = groundLineY - (canvasH * 0.45); 
-  const fadeEnd = groundLineY + (canvasH * 0.05);  
-  
-  const gradient = bCtx.createLinearGradient(0, fadeStart, 0, fadeEnd);
-  gradient.addColorStop(0, 'rgba(0,0,0,1)'); // Zone 1: Far (100% Blur)
-  gradient.addColorStop(0.5, 'rgba(0,0,0,0.5)'); // Zone 2: Transition
-  gradient.addColorStop(1, 'rgba(0,0,0,0)'); // Zone 3: Ground (0% Blur)
-  
-  bCtx.save();
-  if (dutchAngle !== 0) {
-    bCtx.translate(canvasW/2, canvasH/2);
-    bCtx.rotate(-dutchAngle * Math.PI / 180);
-    bCtx.translate(-canvasW/2, -canvasH/2);
-  }
-  bCtx.fillStyle = gradient;
-  bCtx.fillRect(-canvasW*2, -canvasH*2, canvasW * 5, canvasH * 5); // Huge padding to avoid clipping when rotated
-  bCtx.restore();
-  
-  // 4. COMPOSITE: Draw the masked blur layer over the sharp base
-  ctx.drawImage(blurCanvas, 0, 0);
-}
+// drawBackgroundWithSimpleDOF moved to renderer.js (Master version with fixed tilt)
 
-function drawAnamorphicFlare(ctx, settings, w, h) {
-    const lens = LENS_DATA[settings.lens || S.lens] || {};
-    if (lens.type !== 'anamorphic') return;
-
-    const time = settings.timeOfDay ?? S.timeOfDay;
-    if (S.isIndoor) return;
-
-    const sunDir = settings.sunDirection || S.sunDirection;
-    let sunX = (sunDir === 'east') ? w * 0.15 : w * 0.85;
-    const altitude = 1.0 - Math.abs(time - 12) / 6; 
-    if (altitude < 0) return;
-
-    const sunY = h * (0.5 - (altitude * 0.4));
-    const flareOpacity = 0.22 * altitude;
-
-    ctx.save();
-    ctx.globalCompositeOperation = 'screen';
+// === PERSPECTIVE CHARACTER RENDERING ===
+function drawPinchCharacter(ctx, img, x, y, w, h, topP, botP) {
+    const steps = 20; 
+    const sourceW = img.width;
+    const sourceH = img.height;
+    const stepH = sourceH / steps;
     
-    const gradient = ctx.createLinearGradient(0, sunY, w, sunY);
-    gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
-    gradient.addColorStop(0.35, 'rgba(60, 100, 255, 0)');
-    gradient.addColorStop(0.5, `rgba(100, 180, 255, ${flareOpacity})`);
-    gradient.addColorStop(0.65, 'rgba(60, 100, 255, 0)');
-    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
-
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, sunY - 1, w, 3);
-
-    const radial = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, w * 0.4);
-    radial.addColorStop(0, `rgba(120, 200, 255, ${flareOpacity * 0.45})`);
-    radial.addColorStop(1, 'rgba(0, 0, 0, 0)');
-    ctx.fillStyle = radial;
-    ctx.fillRect(0, 0, w, h);
-
-    ctx.restore();
+    for (let i = 0; i < steps; i++) {
+        const sy = i * stepH;
+        const progress = i / steps;
+        const currentP = topP + (botP - topP) * progress;
+        
+        const nextSy = (i + 1) * stepH;
+        const nextProgress = (i + 1) / steps;
+        const nextP = topP + (botP - topP) * nextProgress;
+        
+        const p0 = { x: (1 - currentP) * w / 2, y: progress * h };
+        const p1 = { x: w - (1 - currentP) * w / 2, y: progress * h };
+        const p2 = { x: w - (1 - nextP) * w / 2, y: (progress + 1/steps) * h };
+        const p3 = { x: (1 - nextP) * w / 2, y: (progress + 1/steps) * h };
+        
+        const destW = p1.x - p0.x + 1; 
+        const destH = p2.y - p0.y + 1;
+        ctx.drawImage(img, 0, sy, sourceW, stepH, x + p0.x, y + p0.y, destW, destH);
+    }
 }
+
+// === OPTICS & OVERLAYS ===
+// drawAnamorphicFlare moved to renderer.js for advanced optics
 
 // === STATUS BADGES ===
 function drawBadges(ctx, w, h, frameType) {
@@ -1172,7 +1071,8 @@ function renderFrames() {
     const startCanvas = document.getElementById('startCanvas');
     const endCanvas = document.getElementById('endCanvas');
     
-    applyEffect(startCanvas, S.heroImage, { frameType: 'start' });
+    const startSettings = { ...S, frameType: 'start' };
+    applyEffect(startCanvas, S.heroImage, startSettings);
     
     const endSettings = { ...S, frameType: 'end' };
     const movementConfig = MOVEMENT_CONFIG[S.movement] || { type: 'linear' };
@@ -1187,10 +1087,11 @@ function renderFrames() {
     
     endSettings.bgScale = 1.0;
     endSettings.charScale = 1.0;
-    endSettings.bgPanOffset = 0;
-    endSettings.charPanOffset = 0;
-    endSettings.bgTiltOffset = 0;
-    endSettings.charTiltOffset = 0;
+    // We start with the drift offsets already in S
+    endSettings.bgPanOffset = S.bgPanOffset || 0;
+    endSettings.charPanOffset = S.charPanOffset || 0;
+    endSettings.bgTiltOffset = S.bgTiltOffset || 0;
+    endSettings.charTiltOffset = S.charTiltOffset || 0;
 
     switch(S.movement) {
       case 'Dolly Push In':
@@ -1202,10 +1103,10 @@ function renderFrames() {
         endSettings.charScale = 1.0 - (0.45 * intensity); 
         break;
       case 'Pan Left/Right':
-        endSettings.bgPanOffset = 0.15 * intensity;
+        endSettings.bgPanOffset += 0.15 * intensity;
         break;
       case 'Tilt Up/Down':
-        endSettings.bgTiltOffset = 0.15 * intensity;
+        endSettings.bgTiltOffset += 0.15 * intensity;
         break;
       case 'Crane Up':
         endSettings.bgTiltOffset = 0.25 * intensity;
@@ -1225,11 +1126,12 @@ function renderFrames() {
       case 'Snorricam':
         endSettings.snorricam = true;
         endSettings.snorricamIntensity = intensity;
-        const shakeX = (Math.random() - 0.5) * 0.08 * intensity;
-        const shakeY = (Math.random() - 0.5) * 0.05 * intensity;
+        // 🔥 TUNED: Reduced from 0.08/0.05 to 0.025/0.018 for subtler body-cam feel
+        const shakeX = (Math.random() - 0.5) * 0.025 * intensity;
+        const shakeY = (Math.random() - 0.5) * 0.018 * intensity;
         endSettings.bgPanOffset = shakeX;
         endSettings.bgTiltOffset = shakeY;
-        endSettings.bgScale = 1.0 + (Math.random() * 0.05 * intensity);
+        endSettings.bgScale = 1.0 + (Math.random() * 0.015 * intensity);
         break;
       case 'Dutch Roll':
         const rollAngle = 25 * intensity; // Increased for better visual feedback
@@ -1257,8 +1159,32 @@ function startMotionEngine() {
     function loop() {
         if (!isAnimating) return;
         
-        // We only render if the user is looking at the screen (tab visible)
         if (document.visibilityState === 'visible') {
+            // 🔥 NEW: HANDHELD & MICRO-DRIFT ENGINE
+            // If Handheld or Snorricam is active, we add organic low-frequency drift
+            if (S.movement === 'Handheld' || S.movement === 'Snorricam') {
+                const t = Date.now() / 1000;
+                const intensity = (S.movementIntensity / 100);
+                
+                // Low-frequency organic drift (Perlin-style approximation)
+                const driftX = (Math.sin(t * 0.8) * 0.15 + Math.sin(t * 0.3) * 0.1) * intensity * 0.05;
+                const driftY = (Math.cos(t * 0.7) * 0.12 + Math.sin(t * 0.4) * 0.08) * intensity * 0.05;
+                
+                // Background drifts slightly
+                S.bgPanOffset = driftX;
+                S.bgTiltOffset = driftY;
+                
+                // Subject drifts 50% more than background to create parallax separation
+                S.charPanOffset = driftX * 1.5;
+                S.charTiltOffset = driftY * 1.5;
+            } else {
+                // Clear drift if not in handheld/snorricam
+                S.bgPanOffset = 0;
+                S.bgTiltOffset = 0;
+                S.charPanOffset = 0;
+                S.charTiltOffset = 0;
+            }
+
             renderFrames();
         }
         
@@ -2158,28 +2084,213 @@ function handleFaceUpload(e) {
     reader.readAsDataURL(file);
 }
 
+// === SEAMLESS OPTICAL DEPTH ENGINE ===
+// === SEAMLESS OPTICAL DEPTH ENGINE (REDUNDANT COPIES REMOVED) ===
+// Logic successfully migrated to master renderer.js to ensure frame-level stability.
 
+// ═══════════════════════════════════════════════════════════════════════════
+// UI UTILITIES & STORYBOARD EXPORTS
+// ═══════════════════════════════════════════════════════════════════════════
 
-function addAnimeSpeedLines(ctx, w, h, movement) {
-  if (!movement.includes('Zoom') && !movement.includes('Push')) return;
-  const centerX = w / 2;
-  const centerY = h / 2;
+function resetAll() {
+  if (confirm('Reset all settings?')) location.reload();
+}
+
+function showInfo() {
+  alert('A-CAM by IN-NO-V8\n\nVisual Director for AI Video\nVersion 3.1\n\n• Gemini-powered scene analysis\n• Real-time background removal\n• Scene compositing with DOF\n• Time/lighting visualization');
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  if (!t) return;
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+function showProgress(title, status = 'Initializing...', percent = 0) {
+  const overlay = document.getElementById('progressOverlay');
+  if (!overlay) return;
+  document.getElementById('progressTitle').textContent = title;
+  document.getElementById('progressStatus').textContent = status;
+  document.getElementById('progressFill').style.width = percent + '%';
+  overlay.classList.add('active');
+}
+
+function updateProgress(status, percent) {
+  const statusEl = document.getElementById('progressStatus');
+  const fillEl = document.getElementById('progressFill');
+  if (statusEl) statusEl.textContent = status;
+  if (fillEl) fillEl.style.width = percent + '%';
+}
+
+function hideProgress() {
+  const overlay = document.getElementById('progressOverlay');
+  if (overlay) overlay.classList.remove('active');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// COLOR GRADING & LIGHTING OVERLAYS
+// ═══════════════════════════════════════════════════════════════════════════
+function applyTimeOfDayGrade(ctx, w, h, timeOfDay, isIndoor, sunDirection) {
+  if (isIndoor) return;
+  const timeData = getTimeData(timeOfDay);
+  if (!timeData || !timeData.overlayColor || timeData.overlayAlpha === 0) return;
   
   ctx.save();
-  ctx.globalAlpha = 0.5;
-  ctx.strokeStyle = '#ffffff';
+  ctx.globalCompositeOperation = timeData.blendMode || 'overlay';
+  ctx.globalAlpha = timeData.overlayAlpha;
   
-  for (let i = 0; i < 60; i++) {
-    ctx.lineWidth = Math.random() * 3 + 1;
-    const angle = Math.random() * Math.PI * 2;
-    // Don't draw in the exact center face region
-    const innerRadius = (Math.random() * 0.4 + 0.3) * (h/2); 
-    const outerRadius = Math.max(w, h); // go past edge
-    
-    ctx.beginPath();
-    ctx.moveTo(centerX + Math.cos(angle) * innerRadius, centerY + Math.sin(angle) * innerRadius);
-    ctx.lineTo(centerX + Math.cos(angle) * outerRadius, centerY + Math.sin(angle) * outerRadius);
-    ctx.stroke();
+  let gradient;
+  const sunX = sunDirection === 'east' ? 0 : w;
+  const sunAngle = timeData.sunAngle;
+  
+  if (sunAngle > 30) {
+    gradient = ctx.createLinearGradient(0, 0, 0, h);
+  } else if (sunAngle > 0) {
+    gradient = ctx.createLinearGradient(sunX, 0, w - sunX, h);
+  } else {
+    gradient = ctx.createRadialGradient(w/2, h/2, 0, w/2, h/2, w);
   }
+  
+  gradient.addColorStop(0, timeData.overlayColor);
+  gradient.addColorStop(1, 'transparent');
+  
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, w, h);
   ctx.restore();
+  
+  if (timeData.name === 'Golden Hour' || timeData.name === 'Sunset') {
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    ctx.globalAlpha = 0.15;
+    const glowX = sunDirection === 'east' ? w * 0.15 : w * 0.85;
+    const glowY = h * (0.3 + (90 - Math.abs(sunAngle)) / 180);
+    const sunGlow = ctx.createRadialGradient(glowX, glowY, 0, glowX, glowY, w * 0.4);
+    sunGlow.addColorStop(0, '#ffdd99');
+    sunGlow.addColorStop(1, 'transparent');
+    ctx.fillStyle = sunGlow;
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
+  }
 }
+
+function applyLightingOverlay(ctx, w, h, lightingType, intensity = 50) {
+  if (!lightingType || lightingType === 'Natural Ambient' || intensity === 0) return;
+  const alpha = (intensity / 100) * 0.3;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  
+  if (lightingType === 'Cinematic High Key') {
+    ctx.globalCompositeOperation = 'screen';
+    const g = ctx.createLinearGradient(0, 0, w, h);
+    g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#fff5e6');
+    gradient = ctx.createLinearGradient(sunX, 0, w - sunX, h);
+  } else {
+    gradient = ctx.createRadialGradient(w/2, h/2, 0, w/2, h/2, w);
+  }
+  
+  gradient.addColorStop(0, timeData.overlayColor);
+  gradient.addColorStop(1, 'transparent');
+  
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, w, h);
+  ctx.restore();
+  
+  if (timeData.name === 'Golden Hour' || timeData.name === 'Sunset') {
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    ctx.globalAlpha = 0.15;
+    const glowX = sunDirection === 'east' ? w * 0.15 : w * 0.85;
+    const glowY = h * (0.3 + (90 - Math.abs(sunAngle)) / 180);
+    const sunGlow = ctx.createRadialGradient(glowX, glowY, 0, glowX, glowY, w * 0.4);
+    sunGlow.addColorStop(0, '#ffdd99');
+    sunGlow.addColorStop(1, 'transparent');
+    ctx.fillStyle = sunGlow;
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
+  }
+}
+
+// Redundant applyLightingOverlay removed
+
+function handleMasterUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+        S.masterCharacterSheet = evt.target.result;
+        const preview = document.getElementById('masterPreview');
+        const status = document.getElementById('masterStatus');
+        if (preview) { preview.src = evt.target.result; preview.style.display = 'block'; }
+        if (status) { status.textContent = "LOCKED"; status.style.color = "#44ff44"; }
+        showToast("✓ Master Identity Sheet Locked");
+    };
+    reader.readAsDataURL(file);
+}
+
+function handleFaceUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+        const img = new Image();
+        img.onload = () => {
+            const maxSize = 512;
+            let w = img.width, h = img.height;
+            if (w > maxSize || h > maxSize) {
+                if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
+                else { w = Math.round(w * maxSize / h); h = maxSize; }
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = w; canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, w, h);
+            const compressed = canvas.toDataURL('image/jpeg', 0.85);
+            S.faceCloseup = compressed;
+            const preview = document.getElementById('facePreview');
+            const status = document.getElementById('faceStatus');
+            if (preview) { preview.src = compressed; preview.style.display = 'block'; }
+            if (status) { status.textContent = "LOCKED"; status.style.color = "#44ff44"; }
+            showToast("✓ High-Res Face Locked");
+        };
+        img.src = evt.target.result;
+    };
+    reader.readAsDataURL(file);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INIT (APP START)
+// ═══════════════════════════════════════════════════════════════════════════
+function init() {
+  console.log('🎬 A-CAM Initializing...');
+  loadCustomPresets(); 
+  initDropzone(); 
+  loadLayout();
+  
+  if (typeof renderRatioChips === 'function') renderRatioChips();
+  if (typeof renderEnvPresets === 'function') renderEnvPresets();
+  if (typeof renderStoryboard === 'function') renderStoryboard();
+  
+  // Sync UI with State
+  const lensSel = document.getElementById('lensSelect');
+  if (lensSel) {
+    lensSel.value = S.lens;
+    const lensVal = document.getElementById('lensValue');
+    if (lensVal) lensVal.textContent = S.lens.split(' ')[0];
+  }
+  
+  const intensityVal = document.getElementById('lightingIntensityValue');
+  if (intensityVal) intensityVal.textContent = S.lightingIntensity + '%';
+  
+  const timeSlider = document.getElementById('timeSlider');
+  if (timeSlider) timeSlider.value = S.timeOfDay;
+  
+  if (typeof updateTimeOfDay === 'function') updateTimeOfDay();
+  if (typeof updateAPIStatus === 'function') updateAPIStatus('ready');
+  
+  console.log('✅ A-CAM Ready');
+}
+
+// Start the engine
+window.addEventListener('DOMContentLoaded', init);

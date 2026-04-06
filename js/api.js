@@ -1,327 +1,202 @@
 // === THE NATIVE PRODUCTION ENGINE (NO SDK REQUIRED) ===
 
-async function pushToProduction() {
-    console.log("🚀 pushToProduction v8.7 - Enhanced camera + DOF blur");
-
-    if (!S.heroImage || !S.backgroundPlate) {
-        showToast("Error: Actor and Background are required.");
+/**
+ * THE RENDER EXPORT ENGINE
+ * Packages prompt, camera math, and optics into the Fal.ai JSON payload
+ */
+async function renderToFal(engineName) {
+    const modelEndpoint = MODELS[engineName];
+    if (!modelEndpoint) {
+        showToast("Error: Unknown Engine");
         return;
     }
-    
-    // Master Character Sheet is the PRIMARY identity reference
-    if (!S.masterCharacterSheet) {
-        showToast("⚠️ Upload a Master Identity Sheet for best likeness results");
+
+    // 1. AUTHENTICATION
+    let falKey = localStorage.getItem('FAL_KEY');
+    if (!falKey) {
+        falKey = prompt("Please enter your fal.ai API key:");
+        if (!falKey) return;
+        localStorage.setItem('FAL_KEY', falKey);
     }
 
-    const btn = document.querySelector('.production-btn');
-    const originalHTML = btn.innerHTML;
-    btn.innerHTML = '<span>⏳</span> PREPARING SCENE...';
-    btn.disabled = true;
+    // 2. DATA GATHERING & ENCODING
+    showToast(`🎬 Preparing Scene for ${engineName}...`);
+    
+    let startFrameUrl = null;
+    if (S.heroImage) {
+        // If it's a canvas, use toDataURL. If Image, create a temporary canvas
+        if (S.heroImage instanceof HTMLCanvasElement) {
+            startFrameUrl = S.heroImage.toDataURL('image/jpeg', 0.8);
+        } else {
+            const tmpC = document.createElement('canvas');
+            tmpC.width = S.heroImage.width; tmpC.height = S.heroImage.height;
+            tmpC.getContext('2d').drawImage(S.heroImage, 0, 0);
+            startFrameUrl = tmpC.toDataURL('image/jpeg', 0.8);
+        }
+    }
+
+    const basePrompt = document.getElementById('promptBox')?.textContent || "Cinematic video";
+    const shutter = S.shutterSpeed || 'Standard';
+    const stock = S.filmStock || 'Clean Digital';
+    const finalPrompt = `${basePrompt}. Shot with ${shutter} shutter, textured with ${stock}. Photorealistic, high fidelity.`;
+    const cameraMath = getCameraMath(S.movement, S.movementIntensity);
+
+    // 3. UI LOADING OVERLAY
+    showRenderProgress(engineName);
 
     try {
-        showToast("🎬 Preparing assets for Veo 3.1...");
-
-        // 1. CREATE COMPOSITE FRAMES (for scene composition reference)
-        // These show WHERE the character should be, NOT what they look like
-        const exportStart = document.createElement('canvas');
-        const exportEnd = document.createElement('canvas');
-        exportStart.width = 1280; exportStart.height = 720;
-        exportEnd.width = 1280; exportEnd.height = 720;
-
-        // Render WITH character for composition (pose from Generate Action Pose)
-        renderExportFrame(exportStart, S.heroImage, { ...S, frameType: 'start' });
-        renderExportFrame(exportEnd, S.heroImage, { ...S, frameType: 'end' });
-
-        // REDUCED QUALITY: 0.55 to stay under Vercel payload limit (~100KB per image)
-        const startDataUrl = exportStart.toDataURL('image/jpeg', 0.55);
-        const endDataUrl = exportEnd.toDataURL('image/jpeg', 0.55);
-        
-        // Note: Character sheet is not sent to Veo - character is already in start frame
-        // Veo 3.1 doesn't allow both "image" AND "referenceImages" together
-
-        // 2. BUILD COMPREHENSIVE PROMPT
-        const basePrompt = document.getElementById('promptBox')?.textContent || "Cinematic video";
-        
-        // Get action/performance
-        const actionField = document.getElementById('subjectAction');
-        const characterAction = actionField?.value?.trim() || "standing naturally";
-        
-        // Get outfit description (plain text from the UI)
-        const outfitField = document.getElementById('subjectOutfit');
-        const outfitDesc = outfitField?.value?.trim() || "";
-        
-        // Get action timeline
-        const timelineField = document.getElementById('actionTimeline');
-        const actionTimeline = timelineField?.value?.trim() || "";
-        
-        // Get depth layer descriptions for environment context
-        const foregroundDesc = document.getElementById('subjectInput')?.value?.trim() || "";
-        const midgroundDesc = document.getElementById('midgroundInput')?.value?.trim() || "";
-        const backgroundDesc = document.getElementById('backgroundInput')?.value?.trim() || "";
-        
-// Camera movement description - Optimized for Veo 3.1
-        const currentAngle = S.angle || 'Eye Level';
-        const currentMovement = S.movement || 'Static';
-        
-        const angleDesc = {
-            'Eye Level': 'Eye-level angle',
-            'Low Angle Hero': 'Extreme low angle pointing up',
-            'High Angle': 'High angle pointing down',
-            'Dutch Tilt': 'Dutch angle tilted frame',
-            "Bird's Eye": "Overhead bird's eye view",
-            "Worm's Eye": "Ground level worm's eye view"
-        }[currentAngle] || 'Eye-level angle';
-        
-        const cameraDesc = {
-            'Dolly Push In': 'Fast dolly in, camera moves rapidly forward toward the subject',
-            'Dolly Pull Out': 'Slow dolly out, camera moves slowly backwards away from the subject',
-            'Dolly Zoom': 'Vertigo effect, dolly zoom, camera moves backward while zooming in, background expands',
-            'Pan Left': 'Camera pans horizontally to the left',
-            'Pan Right': 'Camera pans horizontally to the right',
-            'Tilt Up': 'Tilt up, camera pans vertically up from bottom to top',
-            'Tilt Down': 'Tilt down, camera pans vertically down from top to bottom',
-            'Crane Up': 'Crane up, camera lifts high into the air revealing the scene',
-            'Crane Down': 'Crane down, camera descends slowly to the subject',
-            'Dutch Roll': 'Barrel roll, camera spins 360 degrees clockwise while moving forward',
-            'Orbital Arc': 'Orbit 180, camera moves in a half-circle tracking around the subject',
-            'Fast Orbit': 'Fast 360 orbit, camera spins rapidly 360 degrees around the subject',
-            'Tracking Shot': 'Side tracking parallel, camera trucks alongside the subject matching speed',
-            'Leading Shot': 'Leading shot, camera moves backward matching the forward speed of the subject',
-            'Zoom In': 'Smooth optical zoom in, lens magnifies subject, camera stays stationary',
-            'Drone FPV': 'FPV drone dive, aggressive diving motion down towards the subject',
-            'Handheld': 'Handheld camera, shaky motion, natural movement, documentary style',
-            'Static': 'Locked-off static camera, no movement'
-        }[currentMovement] || 'Cinematic camera movement';
-
-        // Calculate character position
-        const posX = S.charX || 0.5;
-        const positionDesc = posX < 0.4 ? 'left of frame' : posX > 0.6 ? 'right of frame' : 'centered';
-
-        // DOF description
-        const dofSetting = S.dof || 'f/2.8 Cinematic';
-        let dofDesc = (dofSetting.includes('f/1.4') || dofSetting.includes('f/2.0') || dofSetting.includes('Shallow')) ? 'shallow depth of field' 
-                    : dofSetting.includes('f/2.8') ? 'cinematic depth of field' 
-                    : 'deep focus';
-
-        // 2. THE VEO GOLDEN FORMULA: [Camera] -> [Subject] -> [Action] -> [Environment]
-        
-        let rackDesc = "";
-        if (S.rackFocus > 0) rackDesc = "Cinematic rack focus pulling from the background into crisp foreground subject focus. ";
-        else if (S.rackFocus < 0) rackDesc = "Cinematic rack focus pulling from subject into perfectly sharp background focus. ";
-        
-        let shutterPrompt = S.shutterSpeed === 'Fast' ? "Fast shutter speed, crisp motion, high action clarity. " 
-                         : S.shutterSpeed === 'Slow' ? "Slow shutter speed, cinematic motion blur, dreamlike trails. " 
-                         : "Standard 180-degree shutter. ";
-                         
-        let stockPrompt = S.filmStock === '16mm Film' ? "Shot on 16mm textured film, vintage grain, warm color grade. " 
-                        : S.filmStock === 'VHS' ? "VHS tape quality, analog glitches, tracking errors, low fidelity. " 
-                        : S.filmStock === 'CCTV' ? "CCTV security camera footage, green night vision tint, low resolution scanlines. " 
-                        : "Modern clean digital sensor. ";
-
-        let finalPrompt = `CAMERA: ${cameraDesc}, ${angleDesc}, ${dofDesc}. ${shutterPrompt}${stockPrompt}${rackDesc}`;
-        
-        finalPrompt += `SUBJECT: A person ${positionDesc}, wearing ${outfitDesc || 'standard clothing'}. `;
-        
-        finalPrompt += `ACTION: The person ${characterAction}. `;
-        if (typeof actionTimeline !== 'undefined' && actionTimeline) finalPrompt += `(${actionTimeline}). `;
-        
-        finalPrompt += `ENVIRONMENT: ${basePrompt}. `;
-        if (typeof foregroundDesc !== 'undefined' || typeof midgroundDesc !== 'undefined' || typeof backgroundDesc !== 'undefined') {
-            if (typeof foregroundDesc !== 'undefined' && foregroundDesc) finalPrompt += `Foreground: ${foregroundDesc}. `;
-            if (typeof midgroundDesc !== 'undefined' && midgroundDesc) finalPrompt += `Midground: ${midgroundDesc}. `;
-            if (typeof backgroundDesc !== 'undefined' && backgroundDesc) finalPrompt += `Background: ${backgroundDesc}. `;
-        }
-        
-        finalPrompt += `STYLE: Photorealistic, cinematic lighting, 35mm film grain, Hollywood production value.`;
-
-        console.log("📤 Sending to Veo 3.1 Standard:");
-        console.log("  Prompt:", finalPrompt);
-
-        btn.innerHTML = '<span>⏳</span> GENERATING VIDEO...';
-        showToast("🚀 Sending to Veo 3.1 Standard...");
-        
-        // 3. DISPATCH TO VEO 3.1 VIA VERTEX AI
-        const requestBody = {
+        // 4. PACKAGE JSON PAYLOAD
+        const payload = {
             prompt: finalPrompt,
-            startFrameBase64: startDataUrl,
-            duration: 5,
-            aspectRatio: '16:9'
+            camera_math: cameraMath,
+            image_url: startFrameUrl,
+            aspect_ratio: S.aspectRatio || '16:9',
+            motion_bucket: 127
         };
-        
-        // 4. THE SMART BYPASS: Prevent Interpolation on 3D Moves
-        const spatialMoves = ['Orbital Arc', 'Tracking Shot', 'Crane Up', 'Crane Down', 'Pan Left', 'Pan Right', 'Tilt Up', 'Tilt Down', 'Dutch Roll'];
-        
-        if (S.faceLock && S.faceCloseup) {
-            if (spatialMoves.includes(currentMovement)) {
-                console.log(`⚠️ Face Lock bypassed: ${currentMovement} requires the 3D physics engine.`);
-                showToast(`Camera Priority: Face Lock disabled to allow ${currentMovement}`, 4000);
-            } else {
-                requestBody.endFrameBase64 = S.faceCloseup;
-                console.log("🎯 Face Lock: Sending face close-up as end frame");
-            }
-        }
-        
-        const response = await fetch('/api/generate-video', {
+
+        if (engineName === 'Veo') payload.duration = "5s";
+
+        console.log(`📤 [${engineName}] Sending Payload...`);
+
+        // 5. EXECUTE INITIAL REQUEST
+        const response = await fetch(`https://fal.run/${modelEndpoint}`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(requestBody)
+            headers: {
+                'Authorization': `Key ${falKey}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
         });
 
-        const result = await response.json();
-        console.log("📥 Veo response:", result);
-        
-        if (!result.success) {
-            throw new Error(result.error || result.details || 'Video generation failed');
+        if (!response.ok) {
+            const errData = await response.json();
+            throw new Error(errData.detail || "API Request Failed");
         }
 
-        // If we got an operation name, start polling
-        if (result.operationName) {
-            console.log("📊 Starting polling for operation:", result.operationName);
-            
-            // Create progress bar overlay
-            const progressOverlay = document.createElement('div');
-            progressOverlay.id = 'renderProgress';
-            progressOverlay.innerHTML = `
-                <div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;">
-                    <div style="color:#fff;font-size:14px;margin-bottom:12px;text-transform:uppercase;letter-spacing:2px;">Generating Video (Veo 3.1)</div>
-                    <div style="width:300px;height:8px;background:#333;border-radius:4px;overflow:hidden;">
-                        <div id="progressBar" style="width:0%;height:100%;background:linear-gradient(90deg,#4285f4,#34a853);transition:width 0.3s;"></div>
-                    </div>
-                    <div id="progressText" style="color:#aaa;font-size:12px;margin-top:8px;">Initializing...</div>
-                    <div id="progressTime" style="color:#666;font-size:11px;margin-top:4px;">0:00 elapsed</div>
-                </div>
-            `;
-            document.body.appendChild(progressOverlay);
-            
-            const progressBar = document.getElementById('progressBar');
-            const progressText = document.getElementById('progressText');
-            const progressTime = document.getElementById('progressTime');
-            const startTime = Date.now();
-            
-            btn.innerHTML = '<span>⏳</span> RENDERING...';
-            showToast("⏳ Generating video... (2-5 min)");
-            
-            // Polling loop
-            let attempts = 0;
-            const maxAttempts = 120; // 10 minutes max
-            
-            while (attempts < maxAttempts) {
-                const elapsed = Math.floor((Date.now() - startTime) / 1000);
-                const mins = Math.floor(elapsed / 60);
-                const secs = elapsed % 60;
-                progressTime.textContent = `${mins}:${secs.toString().padStart(2, '0')} elapsed`;
-                
-                await new Promise(r => setTimeout(r, 5000)); // Poll every 5 seconds
-                attempts++;
-                
-                try {
-                    const pollResponse = await fetch('/api/poll-video', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ operationName: result.operationName })
-                    });
-                    
-                    // Debug: check response before parsing
-                    const pollText = await pollResponse.text();
-                    console.log(`📥 Poll ${attempts} raw:`, pollText.substring(0, 200));
-                    
-                    let pollResult;
-                    try {
-                        pollResult = JSON.parse(pollText);
-                    } catch (parseErr) {
-                        console.error(`❌ Poll ${attempts} JSON parse failed:`, parseErr.message);
-                        continue; // Skip to next iteration
-                    }
-                    
-                    console.log(`⏱️ Poll ${attempts}:`, pollResult.status, pollResult.progress || '', pollResult.error || '');
-                    
-                    if (pollResult.status === 'COMPLETED') {
-                        progressBar.style.width = '100%';
-                        progressText.textContent = 'Complete!';
-                        
-                        if (pollResult.videoUrl) {
-                            console.log("🎉 Video URL:", pollResult.videoUrl);
-                            document.getElementById('renderProgress')?.remove();
-                            window.open(pollResult.videoUrl, '_blank');
-                            showToast("✓ VIDEO READY!");
-                            return;
-                        } else if (pollResult.videoBase64) {
-                            console.log("🎉 Got base64 video, downloading...");
-                            const dataUrl = `data:video/mp4;base64,${pollResult.videoBase64}`;
-                            const blobResponse = await fetch(dataUrl);
-                            const blob = await blobResponse.blob();
-                            
-                            // Auto-download the video
-                            const downloadLink = document.createElement('a');
-                            downloadLink.href = URL.createObjectURL(blob);
-                            downloadLink.download = `a-cam-veo-${Date.now()}.mp4`;
-                            document.body.appendChild(downloadLink);
-                            downloadLink.click();
-                            document.body.removeChild(downloadLink);
-                            
-                            // Also show in a modal for preview
-                            const blobUrl = URL.createObjectURL(blob);
-                            document.getElementById('renderProgress')?.remove();
-                            
-                            // Create video preview modal
-                            const previewModal = document.createElement('div');
-                            previewModal.id = 'videoPreviewModal';
-                            previewModal.innerHTML = `
-                                <div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.9);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;">
-                                    <div style="color:#4f4;font-size:16px;margin-bottom:15px;text-transform:uppercase;letter-spacing:2px;">✓ Video Downloaded!</div>
-                                    <video src="${blobUrl}" controls autoplay loop style="max-width:90%;max-height:70vh;border-radius:8px;box-shadow:0 4px 30px rgba(0,0,0,0.5);"></video>
-                                    <div style="margin-top:15px;display:flex;gap:10px;">
-                                        <button onclick="
-                                            const a = document.createElement('a');
-                                            a.href = '${blobUrl}';
-                                            a.download = 'a-cam-veo-${Date.now()}.mp4';
-                                            a.click();
-                                        " style="background:#4f4;color:#000;border:none;padding:10px 20px;border-radius:4px;cursor:pointer;font-weight:bold;">⬇ Download Again</button>
-                                        <button onclick="document.getElementById('videoPreviewModal')?.remove();" style="background:#333;color:#fff;border:1px solid #555;padding:10px 20px;border-radius:4px;cursor:pointer;">Close</button>
-                                    </div>
-                                </div>
-                            `;
-                            document.body.appendChild(previewModal);
-                            
-                            showToast("✓ VIDEO DOWNLOADED!");
-                            return;
-                        } else {
-                            throw new Error("Video completed but no URL returned");
-                        }
-                    } else if (pollResult.status === 'FAILED') {
-                        throw new Error(pollResult.error || 'Video generation failed');
-                    } else {
-                        // Still in progress
-                        const progress = pollResult.progress || Math.min(5 + attempts * 2, 90);
-                        progressBar.style.width = `${progress}%`;
-                        progressText.textContent = `Rendering... ${Math.round(progress)}%`;
-                        btn.innerHTML = `<span>⏳</span> ${Math.round(progress)}%`;
-                    }
-                } catch (pollErr) {
-                    console.log("Poll error:", pollErr.message);
-                    if (pollErr.message.includes('failed')) throw pollErr;
-                }
-            }
-            
-            throw new Error("Timeout - video generation took too long");
+        const initialResult = await response.json();
+        console.log("📥 Initial Response:", initialResult);
+
+        // 6. POLLING FOR COMPLETION
+        if (initialResult.request_id) {
+            await pollFalStatus(engineName, initialResult.request_id, falKey);
+        } else if (initialResult.video && initialResult.video.url) {
+            handleRenderSuccess(initialResult.video.url);
         }
-        
-        // If we got immediate results
-        if (result.videoUrl) {
-            window.open(result.videoUrl, '_blank');
-            showToast("✓ VIDEO READY!");
-            return;
-        }
-        
-        throw new Error("Unexpected response from video API");
 
     } catch (err) {
-        console.error("❌ ERROR:", err);
+        console.error("❌ Render Error:", err);
         showToast("Error: " + err.message);
-    } finally {
-        document.getElementById('renderProgress')?.remove();
-        btn.innerHTML = originalHTML;
-        btn.disabled = false;
+        hideRenderProgress();
+        if (err.message.includes("Unauthorized")) localStorage.removeItem('FAL_KEY');
+    }
+}
+
+/**
+ * High-fidelity Polling & Progress Updates
+ */
+async function pollFalStatus(engineName, requestId, falKey) {
+    const startTime = Date.now();
+    let attempts = 0;
+    const maxAttempts = 120; // 10 minutes
+
+    while (attempts < maxAttempts) {
+        attempts++;
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        updateRenderProgressUI(engineName, elapsed, attempts);
+
+        try {
+            const pollResponse = await fetch(`https://fal.run/requests/${requestId}/status`, {
+                headers: { 'Authorization': `Key ${falKey}` }
+            });
+            const statusData = await pollResponse.json();
+            
+            console.log(`⏱️ Poll ${attempts}:`, statusData.status);
+
+            if (statusData.status === 'COMPLETED') {
+                const resultResponse = await fetch(`https://fal.run/requests/${requestId}`, {
+                    headers: { 'Authorization': `Key ${falKey}` }
+                });
+                const finalData = await resultResponse.json();
+                if (finalData.video && finalData.video.url) {
+                    handleRenderSuccess(finalData.video.url);
+                    return;
+                }
+            } else if (statusData.status === 'FAILED') {
+                throw new Error("Generation failed on Fal server");
+            }
+        } catch (e) {
+            console.warn("Polling glitch:", e);
+        }
+
+        await new Promise(r => setTimeout(r, 4000)); // Poll every 4 seconds
+    }
+    throw new Error("Render timed out (10 min)");
+}
+
+function showRenderProgress(engineName) {
+    const overlay = document.createElement('div');
+    overlay.id = 'renderProgressOverlay';
+    overlay.innerHTML = `
+        <div class="render-progress-box">
+            <div class="render-progress-title">CINEMATIC BAKE: ${engineName.toUpperCase()}</div>
+            <div class="render-progress-track">
+                <div id="renderProgressBar" class="render-progress-fill"></div>
+            </div>
+            <div id="renderProgressStatus" class="render-progress-status">INITIALIZING...</div>
+            <div id="renderProgressTime" class="render-progress-time">0:00 ELAPSED</div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+}
+
+function updateRenderProgressUI(engineName, elapsed, attempts) {
+    const bar = document.getElementById('renderProgressBar');
+    const status = document.getElementById('renderProgressStatus');
+    const time = document.getElementById('renderProgressTime');
+    
+    const progress = Math.min(5 + (attempts * 1.5), 98);
+    if (bar) bar.style.width = `${progress}%`;
+    if (status) status.textContent = `GENERATING FRAMES... (${Math.round(progress)}%)`;
+    
+    const mins = Math.floor(elapsed / 60);
+    const secs = elapsed % 60;
+    if (time) time.textContent = `${mins}:${secs.toString().padStart(2, '0')} ELAPSED`;
+}
+
+function handleRenderSuccess(videoUrl) {
+    hideRenderProgress();
+    showToast("✓ RENDER COMPLETE!");
+    window.open(videoUrl, '_blank');
+}
+
+function hideRenderProgress() {
+    document.getElementById('renderProgressOverlay')?.remove();
+}
+
+/**
+ * Maps Director's Moves to numeric camera math
+ */
+function getCameraMath(movement, intensity) {
+    const val = (intensity - 50) / 50; // Map 0-100 to -1.0 to 1.0
+    const math = { pan: 0, tilt: 0, zoom: 0, roll: 0 };
+
+    switch(movement) {
+        case 'Pan Left/Right': math.pan = val; break;
+        case 'Tilt Up/Down': math.tilt = val; break;
+        case 'Zoom In': math.zoom = Math.abs(val); break;
+        case 'Dolly Push In': math.zoom = Math.abs(val); break;
+        case 'Dolly Pull Out': math.zoom = -Math.abs(val); break;
+        case 'Dutch Roll': math.roll = val; break;
+    }
+    return math;
+}
+
+async function pushToProduction() {
+    // Delegate to the currently selected model
+    if (S.targetModel) {
+        renderToFal(S.targetModel);
+    } else {
+        showToast("Please select a render engine first (Kling, Runway, or Veo)");
     }
 }
 

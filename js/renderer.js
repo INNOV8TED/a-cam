@@ -250,10 +250,9 @@ const RESOLUTIONS = {
 };
 
 const MODELS = {
-  'Veo 3': { prefix: 'Cinematic video:', tags: ['photorealistic', 'cinematic'], suffix: 'Hollywood production value.', url: 'https://aistudio.google.com/prompts/new_chat' },
-  'Runway': { prefix: '', tags: ['cinematic', 'professional'], suffix: '', url: 'https://app.runwayml.com/' },
-  'Kling': { prefix: '', tags: ['cinematic', 'dynamic'], suffix: '', url: 'https://klingai.com/' },
-  'Pika': { prefix: '', tags: ['stylized', 'motion'], suffix: '', url: 'https://pika.art/' }
+  'Kling': 'fal-ai/kling-video/v1/standard/text-to-video',
+  'Runway': 'fal-ai/runway-gen3/text-to-video',
+  'Veo': 'fal-ai/veo-video/v1/text-to-video'
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -511,13 +510,30 @@ function selectModel(model) {
   S.targetModel = model;
   renderModelBadges();
   generatePrompt();
+  
+  // Trigger Fal render if api.js is loaded
+  if (typeof renderToFal === 'function') {
+    renderToFal(model);
+  }
 }
 
 function renderModelBadges() {
   const badges = document.getElementById('modelBadges');
-  badges.innerHTML = Object.keys(MODELS).map(m =>
-    `<div class="model-badge ${S.targetModel === m ? 'active' : ''}" onclick="selectModel('${m}')">${m}</div>`
-  ).join('');
+  const icons = {
+    'Kling': `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4V20M4 12H12M12 4L4 12L12 20M20 4L12 12L20 20" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    'Runway': `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2L2 7L12 12L22 7L12 2Z" fill="currentColor"/><path d="M2 17L12 22L22 17M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    'Veo': `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2.5"/><path d="M8 12L11 15L16 9" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+  };
+
+  badges.innerHTML = Object.keys(MODELS).map(m => `
+    <div class="model-badge ${S.targetModel === m ? 'active' : ''}" 
+         id="btn-${m.toLowerCase()}"
+         onclick="selectModel('${m}')">
+      <span class="model-icon">${icons[m] || ''}</span>
+      <span class="model-name">${m}</span>
+      <span class="model-spinner"></span>
+    </div>
+  `).join('');
 }
 
 
@@ -1927,6 +1943,63 @@ function getEnvironmentFilter(timeOfDay, isIndoor, baseBlur) {
     return filterStr.trim() === '' ? 'none' : filterStr;
 }
 
+// === SEAMLESS OPTICAL DEPTH ENGINE (Master Version) ===
+// Ensured to stay level to the frame even with Dutch Tilt/Roll
+function drawBackgroundWithSimpleDOF(ctx, bgImage, x, y, w, h, groundY, maxBlur, timeFilter, dutchAngle = 0) {
+  if (maxBlur <= 1) {
+    ctx.save();
+    ctx.filter = timeFilter || 'none';
+    ctx.drawImage(bgImage, x, y, w, h);
+    ctx.restore();
+    return;
+  }
+  
+  const canvasW = ctx.canvas.width;
+  const canvasH = ctx.canvas.height;
+  
+  // 1. Sharp Layer (Base) - Stays in the tilted context
+  ctx.save();
+  const groundBlur = maxBlur * 0.15; 
+  ctx.filter = (timeFilter !== 'none') ? `${timeFilter} blur(${groundBlur}px)` : `blur(${groundBlur}px)`;
+  ctx.drawImage(bgImage, x, y, w, h);
+  ctx.restore();
+  
+  // 2. Blurred Layer Buffer (Offscreen)
+  const blurCanvas = document.createElement('canvas');
+  blurCanvas.width = canvasW; 
+  blurCanvas.height = canvasH;
+  const bCtx = blurCanvas.getContext('2d');
+  
+  // We MUST match the tilt for the image so it aligns with the base layer
+  bCtx.save();
+  const matrix = ctx.getTransform();
+  bCtx.setTransform(matrix);
+  bCtx.filter = (timeFilter !== 'none') ? `${timeFilter} blur(${maxBlur}px)` : `blur(${maxBlur}px)`;
+  bCtx.drawImage(bgImage, x, y, w, h);
+  
+  // 3. APPLY LEVEL MASK (Reset to Screen Identity)
+  bCtx.setTransform(1, 0, 0, 1, 0, 0); // Hard reset to screen space
+  bCtx.globalCompositeOperation = 'destination-in';
+  
+  // Create a perfectly vertical gradient (locked to monitor frame)
+  const grad = bCtx.createLinearGradient(0, 0, 0, canvasH);
+  grad.addColorStop(0, 'rgba(0,0,0,1)'); // Top is blurry
+  grad.addColorStop(Math.max(0, groundY - 0.45), 'rgba(0,0,0,1)'); 
+  grad.addColorStop(groundY, 'rgba(0,0,0,0)'); // groundY is the sharp focal point
+  grad.addColorStop(1, 'rgba(0,0,0,0.15)'); // Bottom slightly blurry
+  
+  bCtx.fillStyle = grad;
+  bCtx.fillRect(0, 0, canvasW, canvasH);
+  bCtx.restore();
+  
+  // 4. COMPOSITE BACK TO MAIN CONTEXT
+  // We draw the level buffer onto the main context by temporarily leveling the context too
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0); 
+  ctx.drawImage(blurCanvas, 0, 0);
+  ctx.restore();
+}
+
 function getFeetAnchor(canvas) {
     if (!canvas) return null;
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -2019,6 +2092,24 @@ function drawCharacterWithShadow(ctx, img, x, y, width, height, timeOfDay, light
 
     const skewX = lightAngle * -1.2; 
     const scaleY = -0.15 - (shadowLength * 0.85); 
+
+    // 2.5 THE CONTACT SHADOW (Grounding layer/Ambient Occlusion)
+    // This is a dark, soft oval right at the feet that stays put regardless of light angle.
+    // It prevents the "floating" look.
+    ctx.save();
+    ctx.translate(x + footX, y + footY);
+    // 🔥 REFINED: Narrower (shoulder-width) and flatter grounding patch
+    const contactBlur = height * 0.012;
+    const contactOpacity = 0.65;
+    ctx.filter = `blur(${contactBlur}px) opacity(${contactOpacity})`;
+    ctx.fillStyle = '#000000';
+    
+    // Draw a small squashed circle (ellipse) at the feet
+    // Radius reduced from 0.25 to 0.18 for better foot-lock feel
+    ctx.beginPath();
+    ctx.ellipse(0, 0, width * 0.18, height * 0.012, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
 
     // 3. THE DIRECTIONAL CAST SHADOW
     ctx.save();
@@ -2588,9 +2679,13 @@ function renderExportFrame(canvas, img, settings) {
     
     let opticalZoom = 1.0;
     let opticalBlur = 0;
-    if (currentLens <= 15) opticalZoom = 0.65;
-    else if (currentLens <= 24) opticalZoom = 0.80;
-    else if (currentLens >= 85) { opticalZoom = 1.25; opticalBlur = 6; }
+    if (currentLens <= 10) opticalZoom = 0.55;
+    else if (currentLens <= 15) opticalZoom = 0.70;
+    else if (currentLens <= 24) opticalZoom = 0.82;
+    else if (currentLens <= 35) opticalZoom = 0.92;
+    else if (currentLens <= 50) opticalZoom = 1.0;
+    else if (currentLens <= 85) { opticalZoom = 1.35; opticalBlur = 4; }
+    else if (currentLens >= 135) { opticalZoom = 1.65; opticalBlur = 8; }
 
     // 🔥 FIX: No more zoomCompensation - allows true Dolly Pulls
     const baseOverscan = 1.6;
@@ -2640,7 +2735,10 @@ function renderExportFrame(canvas, img, settings) {
     const bgX = feetX - bgGroundX + moveX;
     const bgY = adjustedFeetY - bgGroundY + moveY + angleShiftY;
     
-    ctx.drawImage(S.backgroundPlate, bgX, bgY, scaledBgW, scaledBgH);
+    // 🔥 NEW: Check for lens distortion
+    const distortionAmount = (lensData.type === 'fisheye') ? (lensData.distortion || 0.4) : 0;
+    drawWarpedBackground(ctx, S.backgroundPlate, bgX, bgY, scaledBgW, scaledBgH, distortionAmount);
+    
     ctx.restore(); // Restore environment filter ctx.save() from 2582
   }
 

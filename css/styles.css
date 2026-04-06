@@ -1,4 +1,3 @@
-<style>
 
 .ai-progress-container {
   width: 100%;
@@ -99,26 +98,31 @@
 
 /* PRODUCTION PUSH BUTTON - Unified Style */
 .production-btn {
-    padding: 5px 12px; /* Matches the height of .btn exactly */
+    flex: 2;
+    padding: 12px 20px;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 7px; /* Matches neighboring buttons */
-    font-weight: 700;
-    letter-spacing: 1px;
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 2px;
     text-transform: uppercase;
     cursor: pointer;
-    border: 1px solid #cc3333;
-    background: #cc3333;
+    border: 1px solid var(--accent);
+    background: var(--accent);
     color: #fff;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    transition: all 0.15s ease;
+    justify-content: center;
+    gap: 10px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(204, 51, 51, 0.2);
 }
 
 .production-btn:hover {
     background: #e03030;
     border-color: #ff4444;
-    box-shadow: 0 0 10px rgba(204, 51, 51, 0.3);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 25px rgba(204, 51, 51, 0.4);
 }
 
 .production-btn:active {
@@ -126,17 +130,17 @@
 }
 
 .production-btn .icon {
-    font-size: 9px;
+    font-size: 12px;
 }
 
-/* Subtle pulse that glows red instead of expanding */
+/* Premium Glow Pulse */
 .pulse-red {
-    animation: glow-red 2s infinite;
+    animation: premium-glow 2.5s infinite cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-@keyframes glow-red {
+@keyframes premium-glow {
     0% { box-shadow: 0 0 0 0 rgba(204, 51, 51, 0.4); }
-    70% { box-shadow: 0 0 0 6px rgba(204, 51, 51, 0); }
+    70% { box-shadow: 0 0 0 10px rgba(204, 51, 51, 0); }
     100% { box-shadow: 0 0 0 0 rgba(204, 51, 51, 0); }
 }
 
@@ -268,7 +272,7 @@ body{font-family:'JetBrains Mono','SF Mono',monospace;background:var(--bg);color
     align-items: center;
     justify-content: center;
     min-height: 70px;
-    position: relative; /* 🛠️ FIX: Keeps the delete 'X' pinned inside the card */
+    position: relative;
 }
 
 .director-preset:hover {
@@ -402,11 +406,109 @@ body{font-family:'JetBrains Mono','SF Mono',monospace;background:var(--bg);color
 .toggle-label input{accent-color:var(--accent)}
 .toggle-text{flex:1}
 
-/* MODEL BADGES */
-.model-badges{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:12px}
-.model-badge{padding:4px 8px;font-size:7px;background:#1a1a1c;border:1px solid var(--border);color:var(--dim);cursor:pointer;transition:all 0.15s}
-.model-badge:hover{border-color:#444;color:var(--text)}
-.model-badge.active{border-color:var(--accent);color:var(--accent);background:rgba(204,51,51,0.1)}
+/* PRODUCTION ACTION ROW */
+.production-row {
+    display: flex;
+    align-items: stretch;
+    gap: 12px;
+    width: 100%;
+    margin-top: 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    padding-top: 16px;
+}
+
+.model-badges {
+    display: flex;
+    gap: 8px;
+    flex: 3;
+    perspective: 1000px;
+}
+
+.model-badge {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 12px 8px;
+    background: rgba(26, 26, 28, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    color: #888;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+    backdrop-filter: blur(10px);
+}
+
+.model-badge:hover {
+    background: rgba(40, 40, 45, 0.8);
+    border-color: rgba(255, 255, 255, 0.15);
+    transform: translateY(-2px);
+    color: #eee;
+}
+
+.model-badge.active {
+    background: rgba(204, 51, 51, 0.1);
+    border-color: var(--accent);
+    color: var(--accent);
+    box-shadow: 0 4px 20px rgba(204, 51, 51, 0.2);
+}
+
+/* Brand Specific States */
+#btn-kling.active { border-color: #ff4444; color: #ff4444; background: rgba(255, 68, 68, 0.1); }
+#btn-runway.active { border-color: #00f2ff; color: #00f2ff; background: rgba(0, 242, 255, 0.1); }
+#btn-veo.active { border-color: #4285f4; color: #4285f4; background: rgba(66, 133, 244, 0.1); }
+
+.model-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.3s ease;
+}
+
+.model-badge:hover .model-icon {
+    transform: scale(1.1);
+}
+
+.model-name {
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+/* Loading States */
+.model-badge.loading {
+    pointer-events: none;
+    opacity: 0.8;
+}
+
+.model-badge.loading .model-icon,
+.model-badge.loading .model-name {
+    visibility: hidden;
+}
+
+.model-spinner {
+    display: none;
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    border: 2px solid rgba(255,255,255,0.1);
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+.model-badge.loading .model-spinner {
+    display: block;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
 
 /* TOAST */
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(100px);background:var(--card);border:1px solid var(--border);padding:12px 20px;font-size:10px;color:var(--text);opacity:0;transition:all 0.3s;z-index:1000}
@@ -462,4 +564,4 @@ body{font-family:'JetBrains Mono','SF Mono',monospace;background:var(--bg);color
 .storyboard-thumb canvas{width:100%;height:100%;object-fit:contain;filter:grayscale(1) contrast(1.3) brightness(1.05)}
 .storyboard-label{font-size:5px;color:var(--dim);letter-spacing:0.3px;text-transform:uppercase;margin-top:1px;text-align:center}
 .storyboard-empty{color:#333;font-size:10px}
-</style>
+
