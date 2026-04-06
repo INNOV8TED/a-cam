@@ -37,9 +37,14 @@ async function renderToFal(engineName) {
     }
 
     const basePrompt = document.getElementById('promptBox')?.textContent || "Cinematic video";
-    const shutter = S.shutterSpeed || 'Standard';
-    const stock = S.filmStock || 'Clean Digital';
-    const finalPrompt = `${basePrompt}. Shot with ${shutter} shutter, textured with ${stock}. Photorealistic, high fidelity.`;
+    const outfit = document.getElementById('subjectOutfit')?.value || "Casual attire";
+    const action = document.getElementById('subjectAction')?.value || "standing";
+    const location = document.getElementById('sceneDescInput')?.value || "Cinematic setting";
+    
+    // 🔥 PRODUCTION-GRADE MASTER PROMPT
+    // We prioritize the SUBJECT and ENVIRONMENT to ensure the AI doesn't hallucinate cameras
+    const finalPrompt = `${action} of character wearing ${outfit}. Location: ${location}. Cinematography: ${basePrompt}. Photorealistic, high fidelity. No camera gear in view.`;
+    const negPrompt = "camera equipment, tripod, studio gear, lens glass, DSLR body, low resolution, distorted faces, bad anatomy, gear parts";
     const cameraMath = getCameraMath(S.movement, S.movementIntensity);
 
     // 3. UI LOADING OVERLAY
@@ -49,10 +54,9 @@ async function renderToFal(engineName) {
         // 4. PACKAGE JSON PAYLOAD
         const payload = {
             prompt: finalPrompt,
-            camera_math: cameraMath,
+            negative_prompt: negPrompt,
             image_url: startFrameUrl,
-            aspect_ratio: S.aspectRatio || '16:9',
-            motion_bucket: 127
+            aspect_ratio: S.aspectRatio || '16:9'
         };
 
         if (engineName === 'Veo') payload.duration = "5s";
