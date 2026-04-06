@@ -37,7 +37,7 @@ async function renderToFal(engineName) {
         } else {
             const tmpC = document.createElement('canvas');
             tmpC.width = S.heroImage.width; tmpC.height = S.heroImage.height;
-            tmpC.getContext('2d').drawImage(S.heroImage, 0, 0);
+            tmpC.getContext('2d', { willReadFrequently: true }).drawImage(S.heroImage, 0, 0);
             startFrameUrl = tmpC.toDataURL('image/jpeg', 0.8);
         }
     }

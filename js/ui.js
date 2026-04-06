@@ -159,6 +159,7 @@ function getAspectDimensions(containerW, containerH) {
 // drawCharacterWithShadow moved to renderer.js for advanced visual fidelity
 
 function applyEffect(canvas, img, variation = {}) {
+  if (!img) return; // 🛡️ GUARD: Character must exist
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   const settings = { ...S, ...variation };
   
