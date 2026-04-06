@@ -1860,8 +1860,9 @@ function drawCharacterWithShadow(ctx, img, x, y, width, height, timeOfDay, light
     // 1. Calculate Proportional Shadow Physics
     // We use a percentage of the character's height so it scales perfectly for high-res export.
     let shadowBlur = height * 0.04;    // 4% of height for standard soft shadow
-    let shadowOffset = height * 0.12;  // 12% of height - deeper tuck under feet
+    let shadowOffset = height * 0.05;  // 🔥 NEW: 5% of height - Lowered for tight foot anchoring
     let shadowOpacity = 0.7; 
+    let horizontalNudge = width * 0.05; // 🔥 NEW: Horizontal nudge for better base anchoring
     let lightAngle = 0;   
     let shadowLength = 0; 
     
@@ -1910,8 +1911,8 @@ function drawCharacterWithShadow(ctx, img, x, y, width, height, timeOfDay, light
 
     // 2. THE DIRECTIONAL CAST SHADOW
     ctx.save();
-    // FIX: Using proportional shadowOffset instead of -12px
-    ctx.translate(x + width / 2, y + height - shadowOffset);
+    // FIX: Using proportional shadowOffset + horizontalNudge for anchoring
+    ctx.translate(x + width / 2 + horizontalNudge, y + height - shadowOffset);
     ctx.transform(1, 0, skewX, scaleY, 0, 0);
     
     // FIX: Using proportional shadowBlur for consistent fuzzy edges at 4K
@@ -2444,6 +2445,13 @@ function renderExportFrame(canvas, img, settings) {
   const bgZoomScale = settings.bgScale || 1.0;
   const charZoomScale = settings.charScale || 1.0;
 
+  // 🔥 NEW: Head & Shoulders Focus for Dolly/Zoom
+  let adjustedFeetY = feetY;
+  if (charZoomScale > 1.0) {
+    const shiftFactor = (charZoomScale - 1.0) * 0.5;
+    adjustedFeetY += (charH * shiftFactor);
+  }
+
   ctx.save(); 
   
   if (settings.dutchAngle && settings.dutchAngle !== 0) {
@@ -2484,14 +2492,16 @@ function renderExportFrame(canvas, img, settings) {
     let totalBlur = (getBlurAmount(settings.dof || S.dof) * 1.5) + opticalBlur;
     let fgBlur = 0;
     
-    // Dynamic Rack Focus Logic
-    if (S.rackFocus !== 0 && settings.frameType === 'end') {
+    // Dynamic Rack Focus Logic: Proportional across frames
+    if (S.rackFocus !== 0) {
       const rackVal = S.rackFocus / 100.0;
-      if (rackVal > 0) {
-        totalBlur = Math.max(totalBlur, rackVal * 20); // Pull to FG
+      const currentRack = (settings.frameType === 'end') ? rackVal : -rackVal;
+
+      if (currentRack > 0) {
+        totalBlur = Math.max(totalBlur, currentRack * 20); // Pull to FG
       } else {
-        totalBlur = Math.max(0, totalBlur + (rackVal * totalBlur)); // Pull to BG
-        fgBlur = Math.abs(rackVal) * 15;
+        totalBlur = Math.max(0, totalBlur + (currentRack * totalBlur)); // Pull to BG
+        fgBlur = Math.abs(currentRack) * 15;
       }
     }
     settings.calculatedFgBlur = fgBlur;
@@ -2508,7 +2518,7 @@ function renderExportFrame(canvas, img, settings) {
     else if (curAngle === "High Angle") angleShiftY = -scaledBgH * 0.12;
     
     const bgX = feetX - bgGroundX + moveX;
-    const bgY = feetY - bgGroundY + moveY + angleShiftY;
+    const bgY = adjustedFeetY - bgGroundY + moveY + angleShiftY;
     
     ctx.drawImage(S.backgroundPlate, bgX, bgY, scaledBgW, scaledBgH);
     ctx.restore(); 
@@ -2528,7 +2538,7 @@ function renderExportFrame(canvas, img, settings) {
     
     // Parallax logic synced with Preview (1.4x X, 1.0x Y)
     const finalCharX = feetX - (finalCharW / 2) + (moveX * 1.4);
-    const finalCharY = feetY - finalCharH + moveY;
+    const finalCharY = adjustedFeetY - finalCharH + moveY;
     
     // Apply FG Blur from Rack Focus
     if (settings.calculatedFgBlur && settings.calculatedFgBlur > 0) {
@@ -2554,16 +2564,19 @@ function renderExportFrame(canvas, img, settings) {
     applyAtmosphericHaze(ctx, w, h, S.hazeAmount, S.hazeColor, distanceFactor);
   }
   
-    // Anime Speed Lines
+  // Anime Speed Lines (Restore aggressive look)
   if (settings.frameType === 'end' && 
-      (S.movement === 'Dolly Push In' || S.movement === 'Dolly Zoom' || S.movement === 'Zoom In') && 
-      S.movementIntensity >= 75) {
+      (S.movement === 'Dolly Push In' || S.movement === 'Dolly Zoom' || S.movement === 'Zoom In' || S.movement === 'Dolly Pull Out') && 
+      S.movementIntensity >= 70) {
+      
       const centerX = w / 2;
       const centerY = h / 2;
       ctx.save();
-      ctx.globalAlpha = 0.5;
+      ctx.globalAlpha = 0.8; // More visible
       ctx.strokeStyle = '#ffffff';
-      for (let i = 0; i < 60; i++) {
+      
+      const lineCount = S.movementIntensity > 90 ? 120 : 80;
+      for (let i = 0; i < lineCount; i++) {
         ctx.lineWidth = Math.random() * 3 + 1;
         const angle = Math.random() * Math.PI * 2;
         const innerRadius = (Math.random() * 0.4 + 0.3) * (h/2); 

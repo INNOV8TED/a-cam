@@ -206,6 +206,13 @@ function applyEffect(canvas, img, variation = {}) {
   const bgScale = settings.bgScale || 1.0;
   const charScaleMult = settings.charScale || 1.0;
 
+  // 🔥 NEW: Head & Shoulders Focus for Dolly/Zoom
+  // When scaling up, we shift the character down so we stay focused on the head/upper body
+  if (charScaleMult > 1.0) {
+    const shiftFactor = (charScaleMult - 1.0) * 0.5; // Shift down slightly as we zoom
+    adjustedFeetY += (charH * shiftFactor);
+  }
+
   ctx.save();
   
   // GLOBAL DUTCH TILT
@@ -252,14 +259,17 @@ function applyEffect(canvas, img, variation = {}) {
     let totalBlur = getBlurAmount(settings.dof || S.dof) * 1.5;
     let fgBlur = 0;
     
-    // Dynamic Rack Focus Logic
-    if (S.rackFocus !== 0 && settings.frameType === 'end') {
+    // Dynamic Rack Focus Logic: Now affects both frames
+    if (S.rackFocus !== 0) {
+      // Proportional: if End is + (Pull to FG), then Start is - (Pull to BG)
       const rackVal = S.rackFocus / 100.0;
-      if (rackVal > 0) {
-        totalBlur = Math.max(totalBlur, rackVal * 20); // Pull to FG
+      const currentRack = (settings.frameType === 'end') ? rackVal : -rackVal;
+
+      if (currentRack > 0) {
+        totalBlur = Math.max(totalBlur, currentRack * 20); // Pull to FG
       } else {
-        totalBlur = Math.max(0, totalBlur + (rackVal * totalBlur)); // Pull to BG
-        fgBlur = Math.abs(rackVal) * 15;
+        totalBlur = Math.max(0, totalBlur + (currentRack * totalBlur)); // Pull to BG
+        fgBlur = Math.abs(currentRack) * 15;
       }
     }
     settings.calculatedFgBlur = fgBlur;
@@ -322,18 +332,19 @@ function applyEffect(canvas, img, variation = {}) {
     applyAtmosphericHaze(ctx, w, h, S.hazeAmount, S.hazeColor, distanceFactor);
   }
 
-  // Anime Speed Lines
+  // Anime Speed Lines (Restore aggressive look)
   if (settings.frameType === 'end' && 
-      (S.movement === 'Dolly Push In' || S.movement === 'Dolly Zoom' || S.movement === 'Zoom In') && 
-      S.movementIntensity >= 75) {
+      (S.movement === 'Dolly Push In' || S.movement === 'Dolly Zoom' || S.movement === 'Zoom In' || S.movement === 'Dolly Pull Out') && 
+      S.movementIntensity >= 70) {
       
       const centerX = w / 2;
       const centerY = h / 2;
       ctx.save();
-      ctx.globalAlpha = 0.5;
+      ctx.globalAlpha = 0.8; // More visible
       ctx.strokeStyle = '#ffffff';
       
-      for (let i = 0; i < 60; i++) {
+      const lineCount = S.movementIntensity > 90 ? 120 : 80;
+      for (let i = 0; i < lineCount; i++) {
         ctx.lineWidth = Math.random() * 3 + 1;
         const angle = Math.random() * Math.PI * 2;
         const innerRadius = (Math.random() * 0.4 + 0.3) * (h/2); 
