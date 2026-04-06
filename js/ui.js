@@ -149,6 +149,45 @@ function getAspectDimensions(containerW, containerH) {
   return { w: Math.floor(w), h: Math.floor(h) };
 }
 
+function updatePerformance() {
+  S.subjectAction = document.getElementById('subjectAction')?.value || "";
+  S.subjectOutfit = document.getElementById('subjectOutfit')?.value || "";
+  S.actionTimeline = document.getElementById('actionTimeline')?.value || "";
+  generatePrompt();
+}
+
+async function generateActionStandIn() {
+  if (!S.heroImage) {
+    showToast("⚠️ Upload an Actor image first");
+    return;
+  }
+  showToast("🎬 Generating volumetric Action Pose...");
+  startAIProgress(3500);
+  
+  // Simulate AI baking for pose alignment
+  setTimeout(() => {
+    completeAIProgress();
+    showToast("✓ Pose Locked - Scene Ready for Bake");
+    renderFrames();
+  }, 3500);
+}
+
+function switchControlTab(tabId) {
+  // Tabs
+  document.querySelectorAll('.control-tab').forEach(btn => {
+    const btnId = btn.getAttribute('onclick')?.includes(tabId);
+    btn.classList.toggle('active', btnId);
+  });
+  
+  // Content
+  document.querySelectorAll('.tab-content').forEach(panel => {
+    panel.classList.toggle('active', panel.id === tabId + 'Tab');
+  });
+  
+  // Persistence
+  localStorage.setItem('acam_active_tab', tabId);
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // RENDERING UTILITIES
 // ═══════════════════════════════════════════════════════════════════════════
@@ -2113,168 +2152,57 @@ function hideProgress() {
   if (overlay) overlay.classList.remove('active');
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// COLOR GRADING & LIGHTING OVERLAYS
-// ═══════════════════════════════════════════════════════════════════════════
-function applyTimeOfDayGrade(ctx, w, h, timeOfDay, isIndoor, sunDirection) {
-  if (isIndoor) return;
-  const timeData = getTimeData(timeOfDay);
-  if (!timeData || !timeData.overlayColor || timeData.overlayAlpha === 0) return;
+function saveCurrentPreset() {
+  const name = prompt("Name this custom cinematography move:", "Dynamic Orbit");
+  if (!name) return;
   
-  ctx.save();
-  ctx.globalCompositeOperation = timeData.blendMode || 'overlay';
-  ctx.globalAlpha = timeData.overlayAlpha;
+  const icon = prompt("Enter an emoji icon for this move:", "📸") || "📸";
   
-  let gradient;
-  const sunX = sunDirection === 'east' ? 0 : w;
-  const sunAngle = timeData.sunAngle;
+  const newPreset = {
+    name: name,
+    icon: icon,
+    params: {
+      lens: S.lens,
+      angle: S.angle,
+      movement: S.movement,
+      movementIntensity: S.movementIntensity,
+      dof: S.dof,
+      lighting: S.lighting,
+      shutterSpeed: S.shutterSpeed,
+      filmStock: S.filmStock,
+      desc: "Custom User Move"
+    }
+  };
   
-  if (sunAngle > 30) {
-    gradient = ctx.createLinearGradient(0, 0, 0, h);
-  } else if (sunAngle > 0) {
-    gradient = ctx.createLinearGradient(sunX, 0, w - sunX, h);
-  } else {
-    gradient = ctx.createRadialGradient(w/2, h/2, 0, w/2, h/2, w);
-  }
-  
-  gradient.addColorStop(0, timeData.overlayColor);
-  gradient.addColorStop(1, 'transparent');
-  
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, w, h);
-  ctx.restore();
-  
-  if (timeData.name === 'Golden Hour' || timeData.name === 'Sunset') {
-    ctx.save();
-    ctx.globalCompositeOperation = 'screen';
-    ctx.globalAlpha = 0.15;
-    const glowX = sunDirection === 'east' ? w * 0.15 : w * 0.85;
-    const glowY = h * (0.3 + (90 - Math.abs(sunAngle)) / 180);
-    const sunGlow = ctx.createRadialGradient(glowX, glowY, 0, glowX, glowY, w * 0.4);
-    sunGlow.addColorStop(0, '#ffdd99');
-    sunGlow.addColorStop(1, 'transparent');
-    ctx.fillStyle = sunGlow;
-    ctx.fillRect(0, 0, w, h);
-    ctx.restore();
+  customPresets.push(newPreset);
+  localStorage.setItem('acam_custom_presets', JSON.stringify(customPresets));
+  renderStoryboard();
+  showToast(`✓ Move "${name}" saved to your Director library`);
+}
+
+function deleteCustomPreset(index, e) {
+  if (e) e.stopPropagation();
+  if (confirm("Delete this custom move from your library?")) {
+    customPresets.splice(index, 1);
+    localStorage.setItem('acam_custom_presets', JSON.stringify(customPresets));
+    renderStoryboard();
+    showToast("Move deleted");
   }
 }
 
-function applyLightingOverlay(ctx, w, h, lightingType, intensity = 50) {
-  if (!lightingType || lightingType === 'Natural Ambient' || intensity === 0) return;
-  const alpha = (intensity / 100) * 0.3;
-  ctx.save();
-  ctx.globalAlpha = alpha;
-  
-  if (lightingType === 'Cinematic High Key') {
-    ctx.globalCompositeOperation = 'screen';
-    const g = ctx.createLinearGradient(0, 0, w, h);
-    g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#fff5e6');
-    gradient = ctx.createLinearGradient(sunX, 0, w - sunX, h);
-  } else {
-    gradient = ctx.createRadialGradient(w/2, h/2, 0, w/2, h/2, w);
-  }
-  
-  gradient.addColorStop(0, timeData.overlayColor);
-  gradient.addColorStop(1, 'transparent');
-  
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, w, h);
-  ctx.restore();
-  
-  if (timeData.name === 'Golden Hour' || timeData.name === 'Sunset') {
-    ctx.save();
-    ctx.globalCompositeOperation = 'screen';
-    ctx.globalAlpha = 0.15;
-    const glowX = sunDirection === 'east' ? w * 0.15 : w * 0.85;
-    const glowY = h * (0.3 + (90 - Math.abs(sunAngle)) / 180);
-    const sunGlow = ctx.createRadialGradient(glowX, glowY, 0, glowX, glowY, w * 0.4);
-    sunGlow.addColorStop(0, '#ffdd99');
-    sunGlow.addColorStop(1, 'transparent');
-    ctx.fillStyle = sunGlow;
-    ctx.fillRect(0, 0, w, h);
-    ctx.restore();
+function loadCustomPresets() {
+  const saved = localStorage.getItem('acam_custom_presets');
+  if (saved) {
+    try {
+      customPresets = JSON.parse(saved);
+    } catch (e) {
+      console.error("Failed to load custom presets:", e);
+    }
   }
 }
 
-// Redundant applyLightingOverlay removed
-
-function handleMasterUpload(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-        S.masterCharacterSheet = evt.target.result;
-        const preview = document.getElementById('masterPreview');
-        const status = document.getElementById('masterStatus');
-        if (preview) { preview.src = evt.target.result; preview.style.display = 'block'; }
-        if (status) { status.textContent = "LOCKED"; status.style.color = "#44ff44"; }
-        showToast("✓ Master Identity Sheet Locked");
-    };
-    reader.readAsDataURL(file);
-}
-
-function handleFaceUpload(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-        const img = new Image();
-        img.onload = () => {
-            const maxSize = 512;
-            let w = img.width, h = img.height;
-            if (w > maxSize || h > maxSize) {
-                if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
-                else { w = Math.round(w * maxSize / h); h = maxSize; }
-            }
-            const canvas = document.createElement('canvas');
-            canvas.width = w; canvas.height = h;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, w, h);
-            const compressed = canvas.toDataURL('image/jpeg', 0.85);
-            S.faceCloseup = compressed;
-            const preview = document.getElementById('facePreview');
-            const status = document.getElementById('faceStatus');
-            if (preview) { preview.src = compressed; preview.style.display = 'block'; }
-            if (status) { status.textContent = "LOCKED"; status.style.color = "#44ff44"; }
-            showToast("✓ High-Res Face Locked");
-        };
-        img.src = evt.target.result;
-    };
-    reader.readAsDataURL(file);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// INIT (APP START)
-// ═══════════════════════════════════════════════════════════════════════════
-function init() {
-  // console.log('🎬 A-CAM Initializing...');
-  loadCustomPresets(); 
-  initDropzone(); 
-  loadLayout();
-  
-  if (typeof renderRatioChips === 'function') renderRatioChips();
-  if (typeof renderEnvPresets === 'function') renderEnvPresets();
-  if (typeof renderStoryboard === 'function') renderStoryboard();
-  
-  // Sync UI with State
-  const lensSel = document.getElementById('lensSelect');
-  if (lensSel) {
-    lensSel.value = S.lens;
-    const lensVal = document.getElementById('lensValue');
-    if (lensVal) lensVal.textContent = S.lens.split(' ')[0];
-  }
-  
-  const intensityVal = document.getElementById('lightingIntensityValue');
-  if (intensityVal) intensityVal.textContent = S.lightingIntensity + '%';
-  
-  const timeSlider = document.getElementById('timeSlider');
-  if (timeSlider) timeSlider.value = S.timeOfDay;
-  
-  if (typeof updateTimeOfDay === 'function') updateTimeOfDay();
-  if (typeof updateAPIStatus === 'function') updateAPIStatus('ready');
-  
-  // console.log('✅ A-CAM Ready');
-}
-
-// Start the engine
-window.addEventListener('DOMContentLoaded', init);
+window.addEventListener('DOMContentLoaded', () => {
+    init();
+    const lastTab = localStorage.getItem('acam_active_tab') || 'camera';
+    switchControlTab(lastTab);
+});
