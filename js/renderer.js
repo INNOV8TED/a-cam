@@ -169,6 +169,55 @@ function removeStudioBackground(charCtx, charCanvas) {
   charCtx.putImageData(charData, 0, 0);
 }
 
+/**
+ * Advanced Lens Distortion: Warps the background for fisheye effects
+ */
+function drawWarpedBackground(ctx, img, x, y, w, h, distortion) {
+  if (!img) return;
+  if (distortion === 0) {
+    ctx.drawImage(img, x, y, w, h);
+    return;
+  }
+  
+  // 1. Create a workspace for the warp
+  const workspace = document.createElement('canvas');
+  workspace.width = w; workspace.height = h;
+  const wctx = workspace.getContext('2d');
+  wctx.drawImage(img, 0, 0, w, h);
+  
+  const srcData = wctx.getImageData(0, 0, w, h).data;
+  const target = wctx.createImageData(w, h);
+  const targetData = target.data;
+  
+  // 2. Perform the spherical warp
+  for (let dy = 0; dy < h; dy++) {
+    for (let dx = 0; dx < w; dx++) {
+      const nx = (2 * dx / w) - 1;
+      const ny = (2 * dy / h) - 1;
+      const r = Math.sqrt(nx * nx + ny * ny);
+      
+      let f = 1;
+      // Barrel Distortion Formula
+      if (r < 1.0) f = 1.0 + distortion * (r * r - 1.0);
+      
+      const sx = Math.floor(((nx / f + 1) * w) / 2);
+      const sy = Math.floor(((ny / f + 1) * h) / 2);
+      
+      if (sx >= 0 && sx < w && sy >= 0 && sy < h) {
+        const si = (sy * w + sx) * 4;
+        const di = (dy * w + dx) * 4;
+        targetData[di] = srcData[si];
+        targetData[di+1] = srcData[si+1];
+        targetData[di+2] = srcData[si+2];
+        targetData[di+3] = srcData[si+3];
+      }
+    }
+  }
+  
+  wctx.putImageData(target, 0, 0);
+  ctx.drawImage(workspace, x, y, w, h);
+}
+
 // Time of day calculations - continuous 0-24 hours
 function getTimeData(hour) {
   // Returns: { name, colorTemp, sunAngle, intensity, keywords, overlayColor, overlayAlpha }
@@ -2753,7 +2802,13 @@ function renderExportFrame(canvas, img, settings) {
     
     const lensData = LENS_DATA[lensName] || {};
     const distortionAmount = (lensData.type === 'fisheye') ? (lensData.distortion || 0.4) : 0;
-    drawWarpedBackground(ctx, S.backgroundPlate, bgX, bgY, scaledBgW, scaledBgH, distortionAmount);
+    
+    // 🔥 NEW: Anamorphic Squeeze Support
+    const squeeze = lensData.squeeze || 1.0;
+    const finalW = scaledBgW * squeeze;
+    const finalX = bgX - (finalW - scaledBgW) / 2;
+
+    drawWarpedBackground(ctx, S.backgroundPlate, finalX, bgY, finalW, scaledBgH, distortionAmount);
     
     ctx.restore(); // Restore environment filter ctx.save() from 2582
   }
