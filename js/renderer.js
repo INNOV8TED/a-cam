@@ -944,9 +944,17 @@ function handleBgUpload(e) {
         });
         
         console.log('📷 API response status:', response.status);
-        const result = await response.json();
-        console.log('📷 Background analysis result:', result);
-        console.log('📷 Analyzed:', result.analyzed, '| Model:', result.model);
+        // console.log('📷 Background analysis result:', result);
+        
+        // Populate Location Description automatically from analysis
+        if (result.description || result.location) {
+          const locationVal = result.description || result.location;
+          const locInput = document.getElementById('sceneDescInput');
+          if (locInput) {
+            locInput.value = locationVal; 
+            updateSceneDescription(); // Sync to state
+          }
+        }
         
         // Accept layer data regardless of 'analyzed' flag (fallback values are still useful)
         if (result.foreground || result.midground || result.background) {

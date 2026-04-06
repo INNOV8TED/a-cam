@@ -41,15 +41,16 @@ async function renderToFal(engineName) {
     const action = document.getElementById('subjectAction')?.value || "standing";
     const location = document.getElementById('sceneDescInput')?.value || "Cinematic setting";
     
-    // 🔥 DYNAMIC PRODUCTION SYNC (UNIVERSAL ENGINE)
-    // We scrape identity and environment details directly from your interface fields.
-    // This allows the system to work for any person and any location you upload.
+    // 🧬 Identity Awareness
+    // We check both the user-facing text and the raw analysis results for gender markers
+    const rawAnalysis = S.outfitDetails?.description || S.outfitDetails?.outfit || "";
+    const genderPool = (outfit + " " + rawAnalysis).toLowerCase();
+    const isFemale = genderPool.includes("female") || genderPool.includes("woman") || genderPool.includes("girl") || genderPool.includes("lady") || genderPool.includes("actress") || genderPool.includes("heroine");
+    const isMale = genderPool.includes("male") || genderPool.includes("man") || genderPool.includes("boy") || genderPool.includes("gentleman") || genderPool.includes("actor") || genderPool.includes("hero");
+
     let identityPrefix = "A professional cinematic shot of the subject, ";
-    if (outfit.toLowerCase().includes("female") || outfit.toLowerCase().includes("woman") || outfit.toLowerCase().includes("girl")) {
-        identityPrefix = "A professional cinematic shot of a female character, ";
-    } else if (outfit.toLowerCase().includes("male") || outfit.toLowerCase().includes("man") || outfit.toLowerCase().includes("boy")) {
-        identityPrefix = "A professional cinematic shot of a male character, ";
-    }
+    if (isFemale) identityPrefix = "A professional cinematic shot of a female character, ";
+    else if (isMale) identityPrefix = "A professional cinematic shot of a male character, ";
 
     const finalPrompt = `${identityPrefix} wearing ${outfit}, ${action}. Location: ${location}. Cinematography: ${basePrompt}. Photorealistic, high fidelity. No camera gear in view.`;
     const negPrompt = "camera equipment, tripod, studio gear, lens glass, DSLR body, low resolution, distorted faces, bad anatomy, gear parts";
@@ -116,9 +117,12 @@ async function pollFalStatus(engineName, requestId, falKey) {
     let attempts = 0;
     const maxAttempts = 120; // 10 minutes
 
+    // 🔥 Start UI immediately to avoid 'INITIALIZING' freeze
+    updateRenderProgressUI(engineName, 0, 0);
+
     while (attempts < maxAttempts) {
         attempts++;
-        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        const elapsed = Math.floor((Date.now() / 1000) - (startTime / 1000));
         updateRenderProgressUI(engineName, elapsed, attempts);
 
         try {
@@ -127,8 +131,6 @@ async function pollFalStatus(engineName, requestId, falKey) {
             });
             const statusData = await pollResponse.json();
             
-            console.log(`⏱️ Poll ${attempts}:`, statusData.status);
-
             if (statusData.status === 'COMPLETED') {
                 const resultResponse = await fetch(`https://fal.run/requests/${requestId}`, {
                     headers: { 'Authorization': `Key ${falKey}` }
@@ -163,7 +165,7 @@ function showRenderProgress(engineName) {
             <div class="render-progress-track">
                 <div id="renderProgressBar" class="render-progress-fill"></div>
             </div>
-            <div id="renderProgressStatus" class="render-progress-status">INITIALIZING...</div>
+            <div id="renderProgressStatus" class="render-progress-status">PREPARING BAKE...</div>
             <div id="renderProgressTime" class="render-progress-time">0:00 ELAPSED</div>
         </div>
     `;
