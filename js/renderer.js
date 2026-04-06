@@ -2751,7 +2751,7 @@ function renderExportFrame(canvas, img, settings) {
     const bgX = feetX - bgGroundX + moveX;
     const bgY = adjustedFeetY - bgGroundY + moveY + angleShiftY;
     
-    // 🔥 NEW: Check for lens distortion
+    const lensData = LENS_DATA[lensName] || {};
     const distortionAmount = (lensData.type === 'fisheye') ? (lensData.distortion || 0.4) : 0;
     drawWarpedBackground(ctx, S.backgroundPlate, bgX, bgY, scaledBgW, scaledBgH, distortionAmount);
     

@@ -1797,32 +1797,40 @@ function drawPinchCharacter(ctx, img, x, y, w, h, topFactor, bottomFactor) {
 // ═══════════════════════════════════════════════════════════════════════════
 // INIT (APP START)
 // ═══════════════════════════════════════════════════════════════════════════
-loadCustomPresets(); 
-initDropzone(); 
-loadLayout();
-renderModelBadges();
-renderRatioChips();
-renderEnvPresets();
-renderStoryboard();
-clearCanvases();
-
-// 🔥 NEW: Force UI to sync with State defaults on load
-if (document.getElementById('lensSelect')) {
+function init() {
+  loadCustomPresets(); 
+  initDropzone(); 
+  loadLayout();
+  
+  if (typeof renderRatioChips === 'function') renderRatioChips();
+  if (typeof renderEnvPresets === 'function') renderEnvPresets();
+  if (typeof renderStoryboard === 'function') renderStoryboard();
+  renderModelBadges();
+  
+  // Sync UI with State
+  if (document.getElementById('lensSelect')) {
     document.getElementById('lensSelect').value = S.lens;
     document.getElementById('lensValue').textContent = S.lens.split(' ')[0];
-}
-if (document.getElementById('dofSelect')) {
+  }
+  
+  if (document.getElementById('dofSelect')) {
     document.getElementById('dofSelect').value = S.dof;
     document.getElementById('dofValue').textContent = S.dof.split(' ')[0];
+  }
+  
+  if (document.getElementById('lightingIntensityValue')) {
+      document.getElementById('lightingIntensityValue').textContent = S.lightingIntensity + '%';
+  }
+  
+  if (document.getElementById('timeSlider')) {
+      document.getElementById('timeSlider').value = S.timeOfDay;
+  }
+  
+  setEnvironmentMode(S.isIndoor ? 'indoor' : 'outdoor');
+  updateTimeOfDay();
+  
+  console.log('A-CAM initialized with 50mm / f8.0 defaults');
 }
-
-// Initialize lighting/time controls
-document.getElementById('lightingIntensityValue').textContent = S.lightingIntensity + '%';
-document.getElementById('timeSlider').value = S.timeOfDay;
-setEnvironmentMode(S.isIndoor ? 'indoor' : 'outdoor');
-updateTimeOfDay();
-
-console.log('A-CAM initialized with 50mm / f8.0 defaults');
 
 function applyVignette(ctx, x, y, w, h, intensity) {
     const strength = intensity / 100;
