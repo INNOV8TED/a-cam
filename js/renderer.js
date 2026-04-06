@@ -3184,7 +3184,11 @@ async function renderPrevizVideo() {
 
   // Allow a tiny bit of time for the last frame to be sampled
   await new Promise(r => setTimeout(r, 100));
+  
+  // 🔥 FIX: Hard-stop the recorder and the tracks
+  // This prevents the video from 'stretching' to 14 seconds by closing the file immediately.
   recorder.stop();
+  stream.getTracks().forEach(track => track.stop());
 }
 
 /**
