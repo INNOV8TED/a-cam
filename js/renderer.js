@@ -968,6 +968,9 @@ function handleBgUpload(e) {
       document.getElementById('bgUploadZone').classList.add('has-image');
       document.getElementById('bgActionRow').style.display = 'flex'; // Show action buttons
       
+      // 🔥 Update Antigravity Anchor
+      if (window.Antigravity) window.Antigravity.setAnchor('Scene', true);
+      
       S.environmentPreset = null;
       renderEnvPresets();
       renderFrames();

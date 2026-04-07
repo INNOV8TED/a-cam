@@ -59,6 +59,13 @@ function handleUpload(e) {
       document.getElementById('heroImage').src = base64String;
       document.getElementById('uploadZone').classList.add('has-image');
       
+      // 🔥 Update Antigravity Buckets
+      if (window.Antigravity) {
+          window.Antigravity.setAnchor('Anatomy', true);
+          // If this is the first image, it often serves as Identity too
+          if (!S.faceCloseup) window.Antigravity.setAnchor('Identity', true);
+      }
+      
       // 🔥 Trigger the Interrogation
       analyzeUploadedOutfit(base64String);
       
@@ -104,9 +111,13 @@ async function analyzeUploadedOutfit(base64) {
             outfitBox.value = outfitText;
             S.outfitDetails = data;
             showToast('✓ Wardrobe analyzed');
+            
+            // 🔥 Update Textile Anchor
+            if (window.Antigravity) window.Antigravity.setAnchor('Textile', true);
         } else if (data.description) {
             outfitBox.value = data.description;
             showToast('✓ Wardrobe identified');
+            if (window.Antigravity) window.Antigravity.setAnchor('Textile', true);
         }
     } catch (error) {
         console.warn("Analysis glitch (503): Falling back to defaults.");
@@ -117,22 +128,27 @@ async function analyzeUploadedOutfit(base64) {
 
 function clearImage() {
   S.heroImage = null;
-  S.characterImage = null; // Also clear the API string we added earlier
+  S.characterImage = null; 
   S.sceneAnalyzed = false;
   
-  // 🔥 THE FIX: Reset the file input value so you can re-upload the same file
+  // 🔥 Reset Antigravity Buckets
+  if (window.Antigravity) {
+      window.Antigravity.setAnchor('Anatomy', false);
+      window.Antigravity.setAnchor('Identity', false);
+      window.Antigravity.setAnchor('Textile', false);
+  }
+
   const fileInput = document.getElementById('fileInput');
   if (fileInput) fileInput.value = '';
 
   document.getElementById('heroImage').src = '';
   document.getElementById('uploadZone').classList.remove('has-image', 'analyzed');
-  document.getElementById('promptBox').textContent = 'Upload a hero image to generate your cinematography prompt...';
-  document.getElementById('promptBox').classList.remove('has-analysis');
   
   clearCanvases();
   renderStoryboard();
   updateAPIStatus('offline');
 }
+
 
 function getAspectDimensions(containerW, containerH) {
   const ratioData = ASPECT_RATIOS[S.aspectRatio];
@@ -2101,6 +2117,9 @@ function handleMasterUpload(e) {
         status.textContent = "LOCKED";
         status.style.color = "#44ff44"; // Success green
         
+        // 🔥 Update Antigravity Anchor
+        if (window.Antigravity) window.Antigravity.setAnchor('Textile', true);
+        
         showToast("✓ Master Identity Sheet Locked");
     };
     reader.readAsDataURL(file);
@@ -2147,6 +2166,9 @@ function handleFaceUpload(e) {
             
             status.textContent = "LOCKED";
             status.style.color = "#44ff44";
+            
+            // 🔥 Update Antigravity Anchor
+            if (window.Antigravity) window.Antigravity.setAnchor('Identity', true);
             
             // Enable Face Lock toggle now that we have a face
             const faceLockToggle = document.querySelector('.face-lock-toggle');
