@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/generate-pose.js": {
+      "maxDuration": 30
+    }
+  }
+}

@@ -1,0 +1,593 @@
+// --- RENDERER CACHE POOL ---
+const OFFSCREEN_POOL = {
+  blurBuffer: document.createElement("canvas"),
+  charBuffer: document.createElement("canvas"),
+  pinchBuffer: document.createElement("canvas")
+};
+
+function removeStudioBackground(charCtx, charCanvas) {
+  const charData = charCtx.getImageData(0, 0, charCanvas.width, charCanvas.height);
+  const px = charData.data;
+  const cw = charCanvas.width;
+  const ch = charCanvas.height;
+  
+  for (let y = 0; y < ch; y++) {
+    for (let x = 0; x < cw; x++) {
+      const i = (y * cw + x) * 4;
+      const r = px[i], g = px[i+1], b = px[i+2];
+      const max = Math.max(r, g, b), min = Math.min(r, g, b);
+      const saturation = max === 0 ? 0 : (max - min) / max;
+      const brightness = (r + g + b) / 3;
+      
+      // Studio Gray: Low saturation, medium-high brightness
+      // Tighter thresholds to avoid removing clothing
+      if (saturation < 0.12 && brightness > 100 && brightness < 200) {
+        // Full transparent for definite studio gray BG
+        px[i+3] = 0;
+      } else if (saturation < 0.18 && brightness > 90 && brightness < 210) {
+        // Partial transparency for edge blending
+        const satFactor = saturation / 0.18;
+        px[i+3] = Math.floor(satFactor * 255);
+      }
+    }
+  }
+  charCtx.putImageData(charData, 0, 0);
+}
+
+function getTimeData(hour) {
+  // Returns: { name, colorTemp, sunAngle, intensity, keywords, overlayColor, overlayAlpha }
+  
+  if (hour >= 0 && hour < 5) {
+    // Night / Midnight
+    return { name: 'Night', colorTemp: 4000, sunAngle: -45, intensity: 0.15, 
+             keywords: ['night', 'moonlit', 'dark blue ambient'],
+             overlayColor: '#0f0c29', overlayAlpha: 0.5, blendMode: 'overlay' };
+  } else if (hour >= 5 && hour < 6) {
+    // Blue Hour (dawn)
+    const t = (hour - 5);
+    return { name: 'Blue Hour', colorTemp: 4000 + t * 1000, sunAngle: -10 + t * 15, intensity: 0.3 + t * 0.2,
+             keywords: ['blue hour', 'pre-dawn', 'twilight', 'cool blue'],
+             overlayColor: '#2c3e50', overlayAlpha: 0.35, blendMode: 'overlay' };
+  } else if (hour >= 6 && hour < 8) {
+    // Golden Hour (sunrise)
+    const t = (hour - 6) / 2;
+    return { name: 'Golden Hour', colorTemp: 2700 + t * 1000, sunAngle: 5 + t * 20, intensity: 0.5 + t * 0.3,
+             keywords: ['golden hour', 'sunrise', 'warm golden light', 'magic hour', 'long shadows'],
+             overlayColor: '#f7971e', overlayAlpha: 0.25, blendMode: 'soft-light' };
+  } else if (hour >= 8 && hour < 10) {
+    // Morning
+    const t = (hour - 8) / 2;
+    return { name: 'Morning', colorTemp: 3700 + t * 800, sunAngle: 25 + t * 20, intensity: 0.8 + t * 0.1,
+             keywords: ['morning light', 'bright', 'fresh'],
+             overlayColor: '#fff5e6', overlayAlpha: 0.1, blendMode: 'overlay' };
+  } else if (hour >= 10 && hour < 14) {
+    // Midday
+    return { name: 'Midday', colorTemp: 5500, sunAngle: 70 + Math.sin((hour - 10) / 4 * Math.PI) * 20, intensity: 1.0,
+             keywords: ['midday', 'overhead sun', 'neutral daylight', 'bright'],
+             overlayColor: null, overlayAlpha: 0, blendMode: null };
+  } else if (hour >= 14 && hour < 16) {
+    // Afternoon
+    const t = (hour - 14) / 2;
+    return { name: 'Afternoon', colorTemp: 5500 - t * 500, sunAngle: 60 - t * 15, intensity: 0.95 - t * 0.1,
+             keywords: ['afternoon light', 'warm'],
+             overlayColor: '#fff5e6', overlayAlpha: 0.1, blendMode: 'overlay' };
+  } else if (hour >= 16 && hour < 18) {
+    // Golden Hour (sunset approaching)
+    const t = (hour - 16) / 2;
+    return { name: 'Golden Hour', colorTemp: 5000 - t * 2300, sunAngle: 45 - t * 25, intensity: 0.85 - t * 0.25,
+             keywords: ['golden hour', 'warm golden light', 'magic hour', 'long shadows'],
+             overlayColor: '#f7971e', overlayAlpha: 0.2 + t * 0.1, blendMode: 'soft-light' };
+  } else if (hour >= 18 && hour < 19) {
+    // Sunset
+    const t = hour - 18;
+    return { name: 'Sunset', colorTemp: 2700 - t * 400, sunAngle: 20 - t * 15, intensity: 0.6 - t * 0.2,
+             keywords: ['sunset', 'orange sky', 'dramatic', 'warm'],
+             overlayColor: '#ff6b35', overlayAlpha: 0.25 + t * 0.1, blendMode: 'soft-light' };
+  } else if (hour >= 19 && hour < 20) {
+    // Blue Hour (dusk)
+    const t = hour - 19;
+    return { name: 'Blue Hour', colorTemp: 2300 + t * 1700, sunAngle: 5 - t * 15, intensity: 0.4 - t * 0.15,
+             keywords: ['blue hour', 'dusk', 'twilight', 'cool blue'],
+             overlayColor: '#2c3e50', overlayAlpha: 0.3 + t * 0.1, blendMode: 'overlay' };
+  } else {
+    // Night
+    return { name: 'Night', colorTemp: 4000, sunAngle: -30, intensity: 0.15,
+             keywords: ['night', 'dark', 'moonlit', 'artificial light'],
+             overlayColor: '#0f0c29', overlayAlpha: 0.45, blendMode: 'overlay' };
+  }
+}
+
+function getEnvironmentFilter(timeOfDay, isIndoor, baseBlur) {
+    let filterStr = baseBlur > 0 ? `blur(${baseBlur}px)` : ''; 
+
+    if (isIndoor) return filterStr === '' ? 'none' : filterStr;
+
+    // --- TIME OF DAY BACKGROUND GRADING ---
+    if (timeOfDay >= 8 && timeOfDay <= 16) {
+        // Midday: Normal
+        filterStr += ' brightness(1.0) contrast(1.0)';
+    } else if (timeOfDay >= 6 && timeOfDay <= 18) {
+        // Sunrise/Sunset: Warm, slightly contrasty
+        filterStr += ' brightness(0.85) contrast(1.1) sepia(0.3) saturate(1.2)';
+    } else {
+        // Night: Drop exposure significantly, but BOOST contrast.
+        // This crushes shadows to black, but leaves the brightest pixels intact to simulate glowing lights.
+        filterStr += ' brightness(0.4) contrast(1.6) saturate(0.4) sepia(0.2) hue-rotate(180deg)';
+    }
+    
+    return filterStr.trim() === '' ? 'none' : filterStr;
+}
+
+function getBlurAmount(dof) {
+  if (dof.includes('f/1.4')) return 14;
+  if (dof.includes('f/2.0')) return 10;
+  if (dof.includes('f/2.8')) return 6;
+  if (dof.includes('f/4.0')) return 4;
+  if (dof.includes('f/5.6')) return 2;
+  return 0;
+}
+
+function drawBackgroundWithSimpleDOF(ctx, bgImage, x, y, w, h, groundY, maxBlur, timeFilter) {
+  // If f/8.0 or f/11 (sharp) is selected, just draw the image normally
+  if (maxBlur <= 1) {
+    ctx.save();
+    ctx.filter = timeFilter || 'none';
+    ctx.drawImage(bgImage, x, y, w, h);
+    ctx.restore();
+    return;
+  }
+  
+  const canvasH = ctx.canvas.height;
+  const canvasW = ctx.canvas.width;
+  
+  // 1. BASE LAYER: Draw the sharp focus plane (bottom of frame)
+  ctx.save();
+  // We apply a tiny 15% atmosphere blur even to the "sharp" area for realism
+  const groundBlur = maxBlur * 0.15; 
+  ctx.filter = (timeFilter !== 'none') ? `${timeFilter} blur(${groundBlur}px)` : `blur(${groundBlur}px)`;
+  ctx.drawImage(bgImage, x, y, w, h);
+  ctx.restore();
+  
+  // 2. BLUR LAYER: Draw the heavy background blur on a temporary buffer
+  const blurCanvas = document.createElement('canvas');
+  blurCanvas.width = canvasW;
+  blurCanvas.height = canvasH;
+  const bCtx = blurCanvas.getContext('2d');
+  
+  bCtx.filter = (timeFilter !== 'none') ? `${timeFilter} blur(${maxBlur}px)` : `blur(${maxBlur}px)`;
+  bCtx.drawImage(bgImage, x, y, w, h);
+  
+  // 3. SEAMLESS GRADIENT MASK: Blends the blur out as it reaches the feet
+  bCtx.globalCompositeOperation = 'destination-in';
+  
+  // Calculate the ground line in pixels
+  const groundLineY = canvasH * groundY;
+  
+  // THREE ZONE LOGIC: 
+  // - Starts blurring 45% above the ground (Horizon/Far)
+  // - Completely sharp 5% below the ground (Character Feet)
+  const fadeStart = groundLineY - (canvasH * 0.45); 
+  const fadeEnd = groundLineY + (canvasH * 0.05);  
+  
+  const gradient = bCtx.createLinearGradient(0, fadeStart, 0, fadeEnd);
+  gradient.addColorStop(0, 'rgba(0,0,0,1)'); // Zone 1: Far (100% Blur)
+  gradient.addColorStop(0.5, 'rgba(0,0,0,0.5)'); // Zone 2: Transition
+  gradient.addColorStop(1, 'rgba(0,0,0,0)'); // Zone 3: Ground (0% Blur)
+  
+  bCtx.fillStyle = gradient;
+  bCtx.fillRect(0, 0, canvasW, canvasH);
+  
+  // 4. COMPOSITE: Draw the masked blur layer over the sharp base
+  ctx.drawImage(blurCanvas, 0, 0);
+}
+
+function renderSketchMode(ctx, img, w, h, dx, dy, drawW, drawH) {
+  const tempCanvas = document.createElement('canvas');
+  tempCanvas.width = w;
+  tempCanvas.height = h;
+  const tCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+  
+  tCtx.fillStyle = '#0a0a0c';
+  tCtx.fillRect(0, 0, w, h);
+  tCtx.drawImage(img, dx, dy, drawW, drawH);
+  
+  const imageData = tCtx.getImageData(0, 0, w, h);
+  const pixels = imageData.data;
+  const output = ctx.createImageData(w, h);
+  const out = output.data;
+  
+  // Edge detection with background suppression
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const i = (y * w + x) * 4;
+      const r = pixels[i], g = pixels[i+1], b = pixels[i+2];
+      
+      // Check if this is gray background
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      const sat = max === 0 ? 0 : (max - min) / max;
+      const bright = (r + g + b) / 3;
+      
+      if (sat < 0.12 && bright > 80 && bright < 200) {
+        // Gray background - make dark
+        out[i] = out[i+1] = out[i+2] = 10;
+        out[i+3] = 255;
+        continue;
+      }
+      
+      // Edge detection
+      const getL = (ox, oy) => {
+        const idx = ((y + oy) * w + (x + ox)) * 4;
+        return (pixels[idx] * 0.299 + pixels[idx+1] * 0.587 + pixels[idx+2] * 0.114);
+      };
+      
+      const gx = -getL(-1,-1) + getL(1,-1) - 2*getL(-1,0) + 2*getL(1,0) - getL(-1,1) + getL(1,1);
+      const gy = -getL(-1,-1) - 2*getL(0,-1) - getL(1,-1) + getL(-1,1) + 2*getL(0,1) + getL(1,1);
+      const edge = Math.sqrt(gx*gx + gy*gy);
+      
+      if (edge > 25) {
+        const intensity = Math.min(255, edge * 2.5);
+        out[i] = Math.floor(200 * (intensity / 255));
+        out[i+1] = Math.floor(60 * (intensity / 255));
+        out[i+2] = Math.floor(60 * (intensity / 255));
+        out[i+3] = 255;
+      } else if (edge > 12) {
+        const intensity = Math.min(80, edge * 4);
+        out[i] = out[i+1] = out[i+2] = Math.floor(intensity);
+        out[i+3] = 255;
+      } else {
+        out[i] = 12; out[i+1] = 12; out[i+2] = 14;
+        out[i+3] = 255;
+      }
+    }
+  }
+  
+  ctx.putImageData(output, 0, 0);
+}
+
+function drawPinchCharacter(ctx, img, x, y, w, h, topFactor, bottomFactor) {
+    const numSlices = Math.ceil(h);
+    for (let i = 0; i < numSlices; i++) {
+        const percent = i / numSlices;
+        const currentScale = topFactor + (bottomFactor - topFactor) * percent;
+        const sliceW = w * currentScale;
+        const sliceX = x + (w - sliceW) / 2;
+        const sy = (i / numSlices) * img.height;
+        const sh = (1 / numSlices) * img.height;
+        ctx.drawImage(img, 0, sy, img.width, sh, sliceX, y + i, sliceW, 1);
+    }
+}
+
+function drawCharacterWithShadow(ctx, img, x, y, width, height, timeOfDay, lightingStyle = '', sunDirection = 'east') {
+    // 1. Calculate Proportional Shadow Physics
+    // We use a percentage of the character's height so it scales perfectly for high-res export.
+    let shadowBlur = height * 0.04;    // 4% of height for standard soft shadow
+    let shadowOffset = height * 0.12;  // 12% of height - deeper tuck under feet
+    let shadowOpacity = 0.7; 
+    let lightAngle = 0;   
+    let shadowLength = 0; 
+    
+    let charFilter = 'none';
+
+    // --- TIME OF DAY LOGIC ---
+    if (timeOfDay >= 8 && timeOfDay <= 16) {
+        lightAngle = (timeOfDay - 12) / 6; 
+        shadowLength = Math.abs(lightAngle); 
+        charFilter = 'brightness(1.0) contrast(1.0)';
+    } else if (timeOfDay >= 6 && timeOfDay <= 18) {
+        lightAngle = (timeOfDay - 12) / 6; 
+        shadowLength = Math.abs(lightAngle); 
+        charFilter = 'brightness(0.95) contrast(1.1) sepia(0.4) hue-rotate(-10deg) saturate(1.3)'; 
+    } else {
+        lightAngle = 0.3;
+        shadowLength = 0.7;
+        shadowOpacity = 0.4; 
+        charFilter = 'brightness(0.55) contrast(1.1) saturate(0.5)'; 
+    }
+
+    // --- ATMOSPHERIC CONDITIONS LOGIC (Proportional Updates) ---
+    if (lightingStyle.includes('Hard Shadow') || lightingStyle.includes('Noir')) {
+        shadowOpacity = Math.min(1.0, shadowOpacity + 0.3); 
+        shadowBlur = height * 0.01; // 1% for a crisp noir shadow
+        charFilter += ' grayscale(0.6) contrast(1.4)';
+    } else if (lightingStyle.includes('Soft Diffused')) {
+        shadowOpacity = Math.max(0.2, shadowOpacity - 0.2); 
+        shadowBlur = height * 0.08; // 8% for a very soft, cloudy shadow
+        charFilter += ' contrast(0.9) brightness(1.1)';
+    } else if (lightingStyle.includes('Studio Key')) {
+        lightAngle = -0.5; 
+        shadowLength = 0.5;
+        shadowOpacity = 0.85;
+        shadowBlur = height * 0.03;
+        charFilter += ' contrast(1.1)';
+    } else if (lightingStyle.includes('Backlit')) {
+        lightAngle = 0;
+        shadowLength = 1.2; 
+        shadowOpacity = 0.9;
+        charFilter += ' brightness(0.4) contrast(1.3)';
+    }
+
+    const skewX = lightAngle * -1.2; 
+    const scaleY = -0.15 - (shadowLength * 0.85); 
+
+    // 2. THE DIRECTIONAL CAST SHADOW
+    ctx.save();
+    // FIX: Using proportional shadowOffset instead of -12px
+    ctx.translate(x + width / 2, y + height - shadowOffset);
+    ctx.transform(1, 0, skewX, scaleY, 0, 0);
+    
+    // FIX: Using proportional shadowBlur for consistent fuzzy edges at 4K
+    ctx.filter = `brightness(0) blur(${shadowBlur}px) opacity(${shadowOpacity})`;
+    ctx.drawImage(img, -width / 2, -height, width, height);
+    ctx.restore();
+    
+    // 3. DRAW THE BASE CHARACTER
+    ctx.save();
+    ctx.filter = charFilter;
+    ctx.drawImage(img, x, y, width, height);
+    ctx.restore();
+}
+
+function applyEffect(canvas, img, variation = {}) {
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  const settings = { ...S, ...variation };
+  
+  const parent = canvas.parentElement;
+  const containerW = parent ? parent.clientWidth || 200 : 200;
+  const containerH = parent ? parent.clientHeight || 150 : 150;
+  
+  const { w, h } = getAspectDimensions(containerW, containerH);
+  canvas.width = w;
+  canvas.height = h;
+  
+  ctx.fillStyle = '#0a0a0c';
+  ctx.fillRect(0, 0, w, h);
+  
+  const imgRatio = img.width / img.height;
+  const canvasRatio = w / h;
+  
+  // 1. BASE CHARACTER DIMENSIONS
+  let charScale = canvasRatio >= 1.7 ? 0.72 : 0.82;
+  let charH = h * charScale;
+  let charW = charH * imgRatio;
+  
+  // 2. THE GROUND ANCHOR (Pinning the feet)
+  const feetX = w / 2;
+  const groundY = Math.min(settings.groundPlaneY || S.groundPlaneY || 0.88, 0.92);
+  const feetY = h * groundY;
+  
+  const headY = feetY - charH;
+  const minHeadroom = h * 0.08; 
+  let adjustedFeetY = headY < minHeadroom ? charH + minHeadroom : feetY;
+
+  // MOTION INPUTS
+  const moveX = (settings.bgPanOffset || 0) * w;
+  const moveY = (settings.bgTiltOffset || 0) * h;
+  const bgScale = settings.bgScale || 1.0;
+  const charScaleMult = settings.charScale || 1.0;
+
+  ctx.save();
+  
+  // GLOBAL DUTCH TILT
+  if (settings.dutchAngle && settings.dutchAngle !== 0) {
+    ctx.translate(w / 2, h / 2);
+    ctx.rotate(settings.dutchAngle * Math.PI / 180);
+    ctx.translate(-w / 2, -h / 2);
+  }
+
+  // 4. BACKGROUND PLATE (The World)
+  if (S.backgroundPlate) {
+    const bgRatio = S.backgroundPlate.width / S.backgroundPlate.height;
+    const baseOverscan = 1.6;
+    const angleMagnitude = Math.abs(settings.dutchAngle || 0);
+    const smoothTiltBuffer = 1.0 + (Math.min(45, angleMagnitude) / 45) * 0.4;
+    const finalOverscan = baseOverscan * smoothTiltBuffer;
+
+    let bgW, bgH;
+    if (bgRatio > canvasRatio) {
+      bgH = h * finalOverscan; bgW = bgH * bgRatio;
+    } else {
+      bgW = w * finalOverscan; bgH = bgW / bgRatio;
+    }
+
+    const currentLens = parseInt(settings.lens || S.lens || '50'); 
+    let opticalZoom = currentLens <= 15 ? 0.65 : (currentLens <= 24 ? 0.80 : 1.0);
+    
+    const finalBgW = bgW * bgScale * opticalZoom;
+    const finalBgH = bgH * bgScale * opticalZoom;
+    
+    const bgGroundX = finalBgW / 2;
+    const focusPlaneY = settings.groundPlaneY || S.groundPlaneY || 0.85;
+    const bgGroundY = finalBgH * focusPlaneY;
+    
+    const curAngle = settings.angle || S.angle;
+    let angleShiftY = 0;
+    if (curAngle === "Worm's Eye") angleShiftY = finalBgH * 0.25;
+    else if (curAngle === "High Angle") angleShiftY = -finalBgH * 0.12;
+
+    const bgX = feetX - bgGroundX + moveX;
+    const bgY = adjustedFeetY - bgGroundY + moveY + angleShiftY;
+    
+    // 🔥 NEW: CALL THE GRADIENT DEPTH ENGINE
+    const totalBlur = getBlurAmount(settings.dof || S.dof);
+    // Get just the color filter without the blur (blur is handled by the DOF engine)
+    const timeFilter = getEnvironmentFilter(settings.timeOfDay ?? S.timeOfDay, settings.isIndoor ?? S.isIndoor, 0);
+    
+    drawBackgroundWithSimpleDOF(ctx, S.backgroundPlate, bgX, bgY, finalBgW, finalBgH, focusPlaneY, totalBlur, timeFilter);
+    
+    ctx.restore();
+
+    // 5. CHARACTER LAYER (The Actor)
+    const finalCharW = charW * charScaleMult;
+    const finalCharH = charH * charScaleMult;
+    
+    const charCanvas = document.createElement('canvas');
+    charCanvas.width = Math.ceil(finalCharW); charCanvas.height = Math.ceil(finalCharH);
+    const charCtx = charCanvas.getContext('2d');
+    charCtx.drawImage(img, 0, 0, finalCharW, finalCharH);
+    removeStudioBackground(charCtx, charCanvas);
+    
+    let topP = 1.0, botP = 1.0;
+    if (curAngle === "Worm's Eye") { topP = 0.82; botP = 1.18; }
+    else if (curAngle === "High Angle") { topP = 1.08; botP = 0.92; }
+
+    const pCanvas = document.createElement('canvas');
+    pCanvas.width = finalCharW * 1.5; pCanvas.height = finalCharH;
+    drawPinchCharacter(pCanvas.getContext('2d'), charCanvas, (pCanvas.width - finalCharW)/2, 0, finalCharW, finalCharH, topP, botP);
+
+    // 🔥 FIX: 1.4x Parallax on Horizontal, 1.0x (Welded) on Vertical to stop sliding
+    const charX = feetX - (pCanvas.width / 2) + (moveX * 1.4); 
+    const charY = adjustedFeetY - finalCharH + moveY; 
+
+    drawCharacterWithShadow(ctx, pCanvas, charX, charY, pCanvas.width, finalCharH, settings.timeOfDay ?? S.timeOfDay, settings.lighting || S.lighting);
+
+  } else {
+    renderSketchMode(ctx, img, w, h, feetX - charW/2, adjustedFeetY - charH, charW, charH);
+  }
+
+  // 6. UN-TILT THE WORLD
+  ctx.restore(); 
+
+  // 7. ATMOSPHERIC HAZE
+  if (S.hazeAmount > 0) {
+    let distanceFactor = 1.0;
+    if (settings.frameType === 'end' && S.movement === 'Dolly Pull Out') {
+      distanceFactor = 1.0 + (S.movementIntensity / 100) * 0.5;
+    }
+    applyAtmosphericHaze(ctx, w, h, S.hazeAmount, S.hazeColor, distanceFactor);
+  }
+
+  // 8. FINAL LENS PASS
+  if (S.heroImage) {
+    if (typeof applyTimeOfDayGrade === 'function') {
+        applyTimeOfDayGrade(ctx, w, h, settings.timeOfDay ?? S.timeOfDay, settings.isIndoor ?? S.isIndoor, settings.sunDirection ?? S.sunDirection);
+    }
+    if (typeof applyLightingOverlay === 'function') {
+        applyLightingOverlay(ctx, w, h, settings.lighting || S.lighting, settings.lightingIntensity ?? S.lightingIntensity);
+    }
+    applyVignette(ctx, 0, 0, w, h, S.lightingIntensity);
+  }
+  
+  applyLensOverlay(ctx, w, h, settings.lens || S.lens);
+  drawOverlays(ctx, w, h);
+  drawBadges(ctx, w, h, settings.frameType);
+}
+
+function renderStoryboard() {
+  const grid = document.getElementById('storyboardGrid');
+  if (!grid) return;
+  let html = '';
+  
+  // Render Factory Presets
+  Object.entries(DIRECTOR_PRESETS).forEach(([name, preset]) => {
+    const isActive = S.activePreset === name;
+    html += `
+      <div class="director-preset ${isActive ? 'active' : ''}" onclick="applyDirectorPreset('${name}')">
+        <div class="preset-icon">${preset.icon}</div>
+        <div class="preset-name">${name}</div>
+        <div class="preset-desc">${preset.desc}</div>
+      </div>
+    `;
+  });
+
+  // Render Custom Saved Presets
+  customPresets.forEach((preset, index) => {
+    const isActive = S.activePreset === preset.name;
+    html += `
+      <div class="director-preset ${isActive ? 'active' : ''}" style="border-style: dashed;" onclick="applyDirectorPreset('${preset.name}', true)">
+        <div class="preset-icon">${preset.icon}</div>
+        <div class="preset-name">${preset.name}</div>
+        <div class="preset-desc">CUSTOM</div>
+        <div onclick="deleteCustomPreset(${index}, event)" style="position:absolute;top:2px;right:5px;color:#444;font-size:10px;">×</div>
+      </div>
+    `;
+  });
+  
+  grid.innerHTML = html;
+}
+
+function renderFrames() {
+  if (!S.heroImage) return;
+  
+  S.transformedStartFrame = null;
+  S.transformedEndFrame = null;
+  
+  requestAnimationFrame(() => {
+    const startCanvas = document.getElementById('startCanvas');
+    const endCanvas = document.getElementById('endCanvas');
+    
+    applyEffect(startCanvas, S.heroImage, { frameType: 'start' });
+    
+    const endSettings = { ...S, frameType: 'end' };
+    const movementConfig = MOVEMENT_CONFIG[S.movement] || { type: 'linear' };
+    const sliderValue = S.movementIntensity;
+    
+    let intensity;
+    if (movementConfig.type === 'bidirectional') {
+      intensity = (sliderValue - 50) / 50; 
+    } else {
+      intensity = sliderValue / 100; 
+    }
+    
+    endSettings.bgScale = 1.0;
+    endSettings.charScale = 1.0;
+    endSettings.bgPanOffset = 0;
+    endSettings.charPanOffset = 0;
+    endSettings.bgTiltOffset = 0;
+    endSettings.charTiltOffset = 0;
+
+    switch(S.movement) {
+      case 'Dolly Push In':
+        endSettings.bgScale = 1.0 + (0.15 * intensity); 
+        endSettings.charScale = 1.0 + (0.40 * intensity);
+        break;
+      case 'Dolly Pull Out':
+        endSettings.bgScale = 1.0 - (0.25 * intensity);
+        endSettings.charScale = 1.0 - (0.45 * intensity); 
+        break;
+      case 'Pan Left/Right':
+        endSettings.bgPanOffset = 0.15 * intensity;
+        break;
+      case 'Tilt Up/Down':
+        endSettings.bgTiltOffset = 0.15 * intensity;
+        break;
+      case 'Crane Up':
+        endSettings.bgTiltOffset = 0.25 * intensity;
+        endSettings.charScale = 1.0; 
+        break;
+      case 'Zoom In':
+        endSettings.bgScale = 1.0 + (0.50 * intensity);
+        endSettings.charScale = 1.0 + (0.50 * intensity);
+        break;
+      case 'Dolly Zoom':
+        endSettings.bgScale = 1.0 + (0.60 * intensity);
+        endSettings.charScale = 1.0; 
+        break;
+      case 'Handheld':
+        endSettings.handheldIntensity = intensity;
+        break;
+      case 'Snorricam':
+        endSettings.snorricam = true;
+        endSettings.snorricamIntensity = intensity;
+        const shakeX = (Math.random() - 0.5) * 0.08 * intensity;
+        const shakeY = (Math.random() - 0.5) * 0.05 * intensity;
+        endSettings.bgPanOffset = shakeX;
+        endSettings.bgTiltOffset = shakeY;
+        endSettings.bgScale = 1.0 + (Math.random() * 0.05 * intensity);
+        break;
+      case 'Dutch Roll':
+        const rollAngle = 15 * intensity;
+        endSettings.dutchAngle = rollAngle;
+        endSettings.skewX = 0.1 * intensity;
+        break;
+    }
+    
+    if (S.angle === 'Dutch Tilt') {
+      const dutchIntensity = sliderValue / 100;
+      endSettings.dutchAngle = 22 * dutchIntensity;
+    }
+
+    applyEffect(endCanvas, S.heroImage, endSettings);
+  });
+}
+
