@@ -87,43 +87,89 @@ async function analyzeUploadedOutfit(base64) {
     outfitBox.placeholder = "🔍 Scanning wardrobe...";
 
     try {
-        const response = await fetch("/api/analyze", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ 
-                imageBase64: base64,
-                analyzeType: 'character_outfit'
-            })
+        const aiKey = document.getElementById('acam_gemini_key')?.value;
+        const projectId = document.getElementById('gcpProjectId')?.value;
+        const region = document.getElementById('gcpRegion')?.value;
+        const accessToken = document.getElementById('gcpAccessToken')?.value;
+
+        // 🔥 RESILIENCE: If bridge is online, it will handle token injection via ADC.
+        const isBridgeOnline = document.getElementById('apiStatus')?.classList.contains('online');
+        if (!aiKey && (!projectId || (!accessToken && !isBridgeOnline))) {
+            console.warn("⚠️ Sync Blocked: Missing Project Credentials. Skipping AI analysis.");
+            outfitBox.placeholder = "Enter outfit manually (e.g., 'blue denim jacket')";
+            return;
+        }
+
+        // --- OPTIMIZATION: SCALE DOWN FOR VISION ANALYSIS ---
+        const lowResBase64 = await new Promise((resolve, reject) => {
+            const tempImg = new Image();
+            tempImg.onload = () => {
+                const canvas = document.createElement('canvas');
+                const maxDim = 512; // Lower res for faster vision analysis
+                let w = tempImg.width, h = tempImg.height;
+                if (w > maxDim || h > maxDim) {
+                    if (w > h) { h = (maxDim / w) * h; w = maxDim; }
+                    else { w = (maxDim / h) * w; h = maxDim; }
+                }
+                canvas.width = w; canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(tempImg, 0, 0, w, h);
+                resolve(canvas.toDataURL('image/jpeg', 0.8));
+            };
+            tempImg.onerror = reject;
+            tempImg.src = base64;
         });
 
-        if (!response.ok) throw new Error(`API error: ${response.status}`);
-        const data = await response.json();
+        const data = await window.analyzeImageVertexAI(lowResBase64, projectId, region, accessToken);
         
-        if (data.outfit) {
-            let outfitText = data.outfit;
-            if (outfitText.startsWith('{') || outfitText.startsWith('```')) {
-                try {
-                    const cleanJson = outfitText.replace(/```json?|```/g, '').trim();
-                    const parsed = JSON.parse(cleanJson);
-                    outfitText = parsed.outfit || parsed.description || outfitText;
-                } catch (e) {}
-            }
-            outfitBox.value = outfitText;
-            S.outfitDetails = data;
-            showToast('✓ Wardrobe analyzed');
-            
-            // 🔥 Update Textile Anchor
-            if (window.Antigravity) window.Antigravity.setAnchor('Textile', true);
-        } else if (data.description) {
-            outfitBox.value = data.description;
-            showToast('✓ Wardrobe identified');
-            if (window.Antigravity) window.Antigravity.setAnchor('Textile', true);
+        if (!data) {
+            outfitBox.placeholder = "⚠️ Sync glitch. Double check Key & Bridge.";
+            return;
         }
+
+        let outfitText = data.outfit || data.description || "Cinematic attire";
+        if (typeof outfitText !== 'string') outfitText = JSON.stringify(outfitText);
+        
+        // Cleanup JSON markdown if present
+        if (outfitText.includes('{')) {
+            try {
+                const clean = outfitText.replace(/```json|```/g, '').trim();
+                const parsed = JSON.parse(clean);
+                outfitText = parsed.outfit || parsed.description || outfitText;
+            } catch (e) {}
+        }
+
+        outfitBox.value = outfitText;
+        S.outfitDetails = data;
+        showToast('✓ Wardrobe analyzed');
+        
+        // 🔥 Update Outfit Anchor
+        if (window.Antigravity) window.Antigravity.setAnchor('Outfit', true);
+        
     } catch (error) {
-        console.warn("Analysis glitch (503): Falling back to defaults.");
-        outfitBox.value = 'Casual everyday attire';
-        outfitBox.placeholder = "Outfit lock (e.g. 'black leather jacket')";
+        console.warn("Analysis glitch:", error.message);
+        outfitBox.placeholder = "Enter outfit manually...";
     }
+}
+
+function handleMasterUpload(file) {
+  const reader = new FileReader();
+  reader.onload = function(evt) {
+    const img = new Image();
+    img.onload = async function() {
+      S.masterCharacterSheet = evt.target.result;
+      showToast('✓ Identity Sheet Loaded');
+      
+      // Trigger non-blocking analysis if available
+      if (typeof updateOutfitAnalysis === 'function') {
+        updateOutfitAnalysis(file).catch(() => {});
+      }
+
+      if (window.Antigravity) window.Antigravity.setAnchor('Outfit', true, evt.target.result);
+    };
+    img.src = evt.target.result;
+  };
+  reader.readAsDataURL(file);
 }
 
 function clearImage() {
@@ -135,7 +181,8 @@ function clearImage() {
   if (window.Antigravity) {
       window.Antigravity.setAnchor('Anatomy', false);
       window.Antigravity.setAnchor('Identity', false);
-      window.Antigravity.setAnchor('Textile', false);
+      window.Antigravity.setAnchor('Outfit', false);
+      window.Antigravity.setAnchor('Scene', false);
   }
 
   const fileInput = document.getElementById('fileInput');
@@ -149,6 +196,16 @@ function clearImage() {
   updateAPIStatus('offline');
 }
 
+function updatePerformance() {
+    S.subjectAction = document.getElementById('subjectAction').value;
+    S.subjectOutfit = document.getElementById('subjectOutfit').value;
+    S.actionTimeline = document.getElementById('actionTimeline').value;
+    
+    // Sync with global production prompt context
+    S.subjectPerformance = S.subjectAction;
+    
+    console.log("🎭 Performance updated:", {action: S.subjectAction, outfit: S.subjectOutfit});
+}
 
 function getAspectDimensions(containerW, containerH) {
   const ratioData = ASPECT_RATIOS[S.aspectRatio];
@@ -163,13 +220,6 @@ function getAspectDimensions(containerW, containerH) {
     h = w / targetRatio;
   }
   return { w: Math.floor(w), h: Math.floor(h) };
-}
-
-function updatePerformance() {
-  S.subjectAction = document.getElementById('subjectAction')?.value || "";
-  S.subjectOutfit = document.getElementById('subjectOutfit')?.value || "";
-  S.actionTimeline = document.getElementById('actionTimeline')?.value || "";
-  generatePrompt();
 }
 
 async function generateActionStandIn() {
@@ -226,8 +276,11 @@ function applyEffect(canvas, img, variation = {}) {
   canvas.width = w;
   canvas.height = h;
   
+  // 🛡️ SAFETY CLEAR: Ensure we start with a clean slate
   ctx.fillStyle = '#0a0a0c';
   ctx.fillRect(0, 0, w, h);
+
+  if (!img || img.width === 0) return; // 🛡️ GUARD: Invalid image data
   
   const imgRatio = img.width / img.height;
   const canvasRatio = w / h;
@@ -239,12 +292,15 @@ function applyEffect(canvas, img, variation = {}) {
   
   // 2. THE GROUND ANCHOR (Pinning the feet)
   const feetX = w / 2;
-  const groundY = Math.min(settings.groundPlaneY || S.groundPlaneY || 0.88, 0.92);
+  // 🛡️ SAFETY: Ensure groundY is a valid numeric value between 0.1 and 0.95
+  let rawGround = parseFloat(settings.groundPlaneY || S.groundPlaneY);
+  if (isNaN(rawGround)) rawGround = 0.88;
+  const groundY = Math.max(0.1, Math.min(rawGround, 0.95));
   const feetY = h * groundY;
   
   const headY = feetY - charH;
   const minHeadroom = h * 0.08; 
-  let adjustedFeetY = headY < minHeadroom ? charH + minHeadroom : feetY;
+  let adjustedFeetY = (isNaN(headY) || headY < minHeadroom) ? charH + minHeadroom : feetY;
 
   // MOTION INPUTS
   const moveX = (settings.bgPanOffset || 0) * w;
@@ -1487,10 +1543,9 @@ function initDropzone() {
         const packData = JSON.parse(event.target.result);
         installPack(packData);
       } catch (error) {
-        console.warn("Analysis glitch (503): Falling back to defaults.");
-        // Non-blocking fallback
-        return { analyzed: false, outfit: 'Casual everyday attire' };
-    }
+        console.warn("Pack extraction error:", error);
+        showToast("⚠️ Could not load pack contents.");
+      }
     };
     reader.readAsText(file);
   });
@@ -1629,7 +1684,7 @@ async function exportCustomPack() {
   const dataStr = JSON.stringify(acamCartridge, null, 2);
   const safeFileName = packName.replace(/[^a-z0-9]/gi, '_').toLowerCase() + '.acam';
 
-  // MODERN METHOD: Try the File System Access API (Forces "Save As" Dialog)
+  // MODERN METHOD: Try the File System Access API (Forces "Save AS" Dialog)
   try {
     if ('showSaveFilePicker' in window) {
       const fileHandle = await window.showSaveFilePicker({
@@ -1677,16 +1732,18 @@ function renderStoryboard() {
   let html = '';
   
   // Render Factory Presets
-  Object.entries(DIRECTOR_PRESETS).forEach(([name, preset]) => {
-    const isActive = S.activePreset === name;
-    html += `
-      <div class="director-preset ${isActive ? 'active' : ''}" onclick="applyDirectorPreset('${name}')">
-        <div class="preset-icon">${preset.icon}</div>
-        <div class="preset-name">${name}</div>
-        <div class="preset-desc">${preset.desc}</div>
-      </div>
-    `;
-  });
+  if (typeof DIRECTOR_PRESETS !== 'undefined') {
+    Object.entries(DIRECTOR_PRESETS).forEach(([name, preset]) => {
+      const isActive = S.activePreset === name;
+      html += `
+        <div class="director-preset ${isActive ? 'active' : ''}" onclick="applyDirectorPreset('${name}')">
+          <div class="preset-icon">${preset.icon || '🎬'}</div>
+          <div class="preset-name">${name}</div>
+          <div class="preset-desc">${preset.desc || 'Preset'}</div>
+        </div>
+      `;
+    });
+  }
 
   // Render Custom Saved Presets
   customPresets.forEach((preset, index) => {
@@ -1813,55 +1870,140 @@ function drawPinchCharacter(ctx, img, x, y, w, h, topFactor, bottomFactor) {
 // ═══════════════════════════════════════════════════════════════════════════
 // INIT (APP START)
 // ═══════════════════════════════════════════════════════════════════════════
-function init() {
+async function init() {
+  window.__ACAM_LOADING__ = true;
+  S._isPopulated = false; // Reset for this tab initial check
   loadCustomPresets(); 
-  initDropzone(); 
-  loadLayout();
+  if (typeof initDropzone === 'function') initDropzone(); 
+  if (typeof loadLayout === 'function') loadLayout();
+
+  // 🔐 CREDENTIAL RECALL: BRAIN & ARTIST
+  const creds = {
+    'acam_gemini_key': 'Gemini Key (Brain)',
+    'acam_fal_key': 'Fal.ai Key (Runway)',
+    'gcpProjectId': 'Project ID',
+    'gcpRegion': 'Region',
+    'gcpAccessToken': 'Access Token (Artist)'
+  };
   
+  Object.keys(creds).forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+          const saved = localStorage.getItem(id);
+          if (saved) el.value = saved;
+          el.addEventListener('input', (e) => {
+              localStorage.setItem(id, e.target.value);
+          });
+      }
+  });
+
+  // 💾 SESSION RECOVERY: Check for previous session data
+  if (window.Persistence) {
+      const session = await window.Persistence.loadSession();
+      if (session && session.settings) {
+          console.log("📂 Restoring previous session settings...");
+          Object.assign(S, session.settings);
+      }
+      
+      // Load Assets (Hero, Background, Face)
+      const assetPromises = [];
+
+      if (session.assets.heroImage) {
+          console.log("👤 Restoring Hero Image...");
+          assetPromises.push(new Promise(resolve => {
+              const img = new Image();
+              img.onload = () => {
+                  S.heroImage = img;
+                  const heroEl = document.getElementById('heroImage');
+                  if (heroEl) heroEl.src = session.assets.heroImage;
+                  const uploadZone = document.getElementById('uploadZone');
+                  if (uploadZone) uploadZone.classList.add('has-image');
+                  resolve();
+              };
+              img.src = session.assets.heroImage;
+          }));
+      }
+      
+      if (session.assets.backgroundPlate) {
+          console.log("🏞️ Restoring Background Plate...");
+          assetPromises.push(new Promise(resolve => {
+              const img = new Image();
+              img.onload = () => {
+                  S.backgroundPlate = img;
+                  resolve();
+              };
+              img.src = session.assets.backgroundPlate;
+          }));
+      }
+
+      await Promise.all(assetPromises);
+
+      if (session.settings || assetPromises.length > 0) {
+          S._isPopulated = true;
+      }
+
+      if (session.assets.faceCloseup) {
+          S.faceCloseup = session.assets.faceCloseup;
+      }
+
+      // ⚓ SYNC ANTIGRAVITY ANCHORS (Identity, Anatomy, etc)
+      if (window.Antigravity && typeof window.Antigravity.syncAnchors === 'function') {
+          window.Antigravity.syncAnchors(true); // Silent sync on init
+      }
+  }
+
   if (typeof renderRatioChips === 'function') renderRatioChips();
   if (typeof renderEnvPresets === 'function') renderEnvPresets();
   if (typeof renderStoryboard === 'function') renderStoryboard();
-  renderModelBadges();
+  if (typeof renderModelBadges === 'function') renderModelBadges();
   
   // Sync UI with State
   if (document.getElementById('lensSelect')) {
     document.getElementById('lensSelect').value = S.lens;
-    document.getElementById('lensValue').textContent = S.lens.split(' ')[0];
+    const lensVal = document.getElementById('lensValue');
+    if (lensVal) lensVal.textContent = S.lens.split(' ')[0];
   }
   
   if (document.getElementById('dofSelect')) {
     document.getElementById('dofSelect').value = S.dof;
-    document.getElementById('dofValue').textContent = S.dof.split(' ')[0];
+    const dofVal = document.getElementById('dofValue');
+    if (dofVal) dofVal.textContent = S.dof.split(' ')[0];
   }
   
-  if (document.getElementById('lightingIntensityValue')) {
-      document.getElementById('lightingIntensityValue').textContent = S.lightingIntensity + '%';
-  }
+  const intensityVal = document.getElementById('lightingIntensityValue');
+  if (intensityVal) intensityVal.textContent = S.lightingIntensity + '%';
   
-  if (document.getElementById('timeSlider')) {
-      document.getElementById('timeSlider').value = S.timeOfDay;
-  }
+  const timeSlider = document.getElementById('timeSlider');
+  if (timeSlider) timeSlider.value = S.timeOfDay;
   
-  setEnvironmentMode(S.isIndoor ? 'indoor' : 'outdoor');
-  updateTimeOfDay();
+  if (typeof setEnvironmentMode === 'function') setEnvironmentMode(S.isIndoor ? 'indoor' : 'outdoor');
+  if (typeof updateTimeOfDay === 'function') updateTimeOfDay();
+  
+  // 🎭 SYNC PERFORMANCE INPUTS
+  const subAction = document.getElementById('subjectAction');
+  if (subAction && S.subjectAction) subAction.value = S.subjectAction;
+  
+  const subOutfit = document.getElementById('subjectOutfit');
+  if (subOutfit && S.subjectOutfit) subOutfit.value = S.subjectOutfit;
+  
+  const actTimeline = document.getElementById('actionTimeline');
+  if (actTimeline && S.actionTimeline) actTimeline.value = S.actionTimeline;
   
   // 🚀 PROGRAMMATIC BINDING for Production Button
   const prodBtn = document.getElementById('productionBtn');
   if (prodBtn) {
     prodBtn.onclick = () => {
-        console.log("🚀 PUNCH TO PRODUCTION: Signal Received!");
         if (typeof window.pushToProduction === 'function') {
             window.pushToProduction();
-        } else {
-            console.error("❌ ABORT: pushToProduction not found in global scope");
         }
     };
   }
 
   // Ensure labels are synced
-  selectModel(S.targetModel || 'Kling');
+  if (typeof selectModel === 'function') selectModel(S.targetModel || 'Kling');
   
-  console.log('A-CAM initialized with Production Hub Ready');
+  window.__ACAM_LOADING__ = false;
+  console.log('A-CAM initialized with Session Persistence Ready');
 }
 
 function applyVignette(ctx, x, y, w, h, intensity) {
@@ -2088,12 +2230,12 @@ function renderModelBadges() {
   const container = document.getElementById('modelBadges');
   if (!container) return;
   
-  // Use the models defined in api.js (exported implicitly or accessed via global)
-  const availableModels = Object.keys(MODELS);
+  // Use the models defined in state.js
+  const appModels = window.MODELS || [];
   
-  container.innerHTML = availableModels.map(m => `
-    <div class="model-badge ${S.targetModel === m ? 'active' : ''}" onclick="selectModel('${m}')">
-      ${m}
+  container.innerHTML = appModels.map(m => `
+    <div class="model-badge ${S.targetModel === m.id ? 'active' : ''}" onclick="selectModel('${m.id}')">
+      <span class="model-icon">${m.icon}</span> ${m.id}
     </div>
   `).join('');
 }
@@ -2118,7 +2260,7 @@ function handleMasterUpload(e) {
         status.style.color = "#44ff44"; // Success green
         
         // 🔥 Update Antigravity Anchor
-        if (window.Antigravity) window.Antigravity.setAnchor('Textile', true);
+        if (window.Antigravity) window.Antigravity.setAnchor('Outfit', true, evt.target.result);
         
         showToast("✓ Master Identity Sheet Locked");
     };
@@ -2275,6 +2417,16 @@ function loadCustomPresets() {
       customPresets = JSON.parse(saved);
     } catch (e) {
       console.error("Failed to load custom presets:", e);
+    }
+  }
+}
+
+async function resetDeep() {
+  if (confirm("☢ DEEP RESET: This will clear your entire session, including uploaded images and location plates. Are you sure?")) {
+    if (window.Persistence) {
+        await window.Persistence.clearSession();
+        showToast("Session Cleared. Refreshing...");
+        setTimeout(() => location.reload(), 1000);
     }
   }
 }

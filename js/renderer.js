@@ -183,6 +183,7 @@ function drawWarpedBackground(ctx, img, x, y, w, h, distortion) {
   const workspace = document.createElement('canvas');
   workspace.width = w; workspace.height = h;
   const wctx = workspace.getContext('2d');
+  wctx.imageSmoothingEnabled = false;
   wctx.drawImage(img, 0, 0, w, h);
   
   const srcData = wctx.getImageData(0, 0, w, h).data;
@@ -639,7 +640,7 @@ function getIntensityWord(val) {
 function generatePrompt() {
   if (!S.heroImage) return;
   
-  const model = MODELS[S.targetModel];
+  const model = (window.MODELS || []).find(m => m.id.toLowerCase() === S.targetModel.toLowerCase());
   const lens = LENS_DATA[S.lens] || LENS_DATA['35mm Standard'];
   const angle = ANGLE_DATA[S.angle] || ANGLE_DATA['Eye Level'];
   const lighting = LIGHTING_DATA[S.lighting] || LIGHTING_DATA['Natural Ambient'];
@@ -746,7 +747,7 @@ function generatePrompt() {
   }
   
   const parts = [
-    model.prefix,
+    (model ? model.prefix : ''),
     aspectRatio.keywords + '.',
     sceneDesc,
     performanceKinetics ? `Subject action: ${performanceKinetics}.` : '',
@@ -755,12 +756,19 @@ function generatePrompt() {
     `${lightingDesc}${S.isIndoor ? ' interior' : ' exterior'}.`,
     keywords.slice(0, 10).join(', ') + '.',
     `${resolution.label} render.`,
-    model.suffix
+    (model ? model.suffix : '')
   ].filter(Boolean);
   
   const promptBox = document.getElementById('promptBox');
-  promptBox.textContent = parts.join(' ');
-  promptBox.classList.toggle('has-analysis', S.sceneAnalyzed);
+  if (promptBox) {
+    promptBox.textContent = parts.join(' ');
+    promptBox.classList.toggle('has-analysis', S.sceneAnalyzed);
+  }
+  
+  // Update internal hardened brief if Antigravity is present
+  if (window.Antigravity) {
+    window.Antigravity.hardenedBrief = parts.join(' ');
+  }
 }
 
 
@@ -977,27 +985,19 @@ function handleBgUpload(e) {
       generatePrompt();
       showToast('🔍 Analyzing scene layers...');
       
-      // Analyze for depth layers using new background_layers type
+      // Analyze for depth layers using AI Studio Express Lane
       try {
-        console.log('📷 Background analysis: Sending image to API...');
-        console.log('📷 Image size:', evt.target.result.length, 'chars');
+        console.log('📷 Background analysis: Initiating AI Studio Handshake...');
         
-        const response = await fetch('/api/analyze', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            imageBase64: evt.target.result,
-            analyzeType: 'background_layers'
-          })
-        });
+        const result = await window.analyzeBackgroundVision(evt.target.result);
+        if (!result) throw new Error("AI Scene Handshake failed");
         
-        console.log('📷 API response status:', response.status);
-        const result = await response.json();
-        // console.log('📷 Background analysis result:', result);
+        console.log('📷 Background analysis success:', result);
         
-        // Populate Location Description automatically from analysis
         if (result.description || result.location) {
-          const locationVal = result.description || result.location;
+          let locationVal = result.description || result.location;
+          if (typeof locationVal === 'object') locationVal = JSON.stringify(locationVal);
+          
           const locInput = document.getElementById('sceneDescInput');
           if (locInput) {
             locInput.value = locationVal; 
@@ -1008,12 +1008,11 @@ function handleBgUpload(e) {
         // Accept layer data regardless of 'analyzed' flag (fallback values are still useful)
         if (result.foreground || result.midground || result.background) {
           // Update horizon and ground plane
-          if (result.horizonY) {
-            S.horizonY = parseFloat(result.horizonY);
-          }
-          if (result.groundY) {
-            S.groundPlaneY = parseFloat(result.groundY);
-          }
+          const hVal = parseFloat(result.horizonY);
+          const gVal = parseFloat(result.groundY);
+          
+          if (!isNaN(hVal)) S.horizonY = Math.max(0.1, Math.min(hVal, 0.9));
+          if (!isNaN(gVal)) S.groundPlaneY = Math.max(0.1, Math.min(gVal, 0.95));
           
           // Populate the three layer text boxes
           if (result.foreground) {
@@ -1047,9 +1046,8 @@ function handleBgUpload(e) {
           showToast('Background loaded - click Analyze & Outpaint for best results');
         }
       } catch (err) {
-        console.error('❌ Background analysis error:', err);
-        console.error('❌ Error message:', err.message);
-        showToast('Background loaded - manual layer input available');
+        console.warn('⚠️ Background analysis bypassed (503). Manual layers preserved.', err.message);
+        showToast('Background ready (Kinetic defaults applied)');
       }
     };
     img.src = evt.target.result;
@@ -1058,7 +1056,21 @@ function handleBgUpload(e) {
 }
 
 function updateSceneDescription() {
-  S.sceneDescription = document.getElementById('sceneDescInput').value;
+  const val = document.getElementById('sceneDescInput').value;
+  S.sceneDescription = val;
+  
+  // 🏠 INDOOR/OUTDOOR AUTO-DETECTION
+  const lower = val.toLowerCase();
+  const indoorKeywords = ['room', 'indoor', 'interior', 'office', 'house', 'studio', 'apartment', 'kitchen', 'hallway', 'lab'];
+  const isIndoor = indoorKeywords.some(kw => lower.includes(kw));
+  
+  if (isIndoor !== S.isIndoor) {
+    S.isIndoor = isIndoor;
+    if (window.setEnvironmentMode) window.setEnvironmentMode(isIndoor ? 'indoor' : 'outdoor');
+    if (window.Antigravity && window.Antigravity.log) {
+        window.Antigravity.log(`PERCEPTION: Detected ${isIndoor ? 'INDOOR' : 'OUTDOOR'} venue. Syncing physics...`, "reasoning");
+    }
+  }
 }
 
 function updatePerformance() {
@@ -2392,6 +2404,7 @@ function drawSketchFrame(ctx, img, x, y, w, h, frameType) {
   tempCanvas.width = w;
   tempCanvas.height = h;
   const tCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+  tCtx.imageSmoothingEnabled = false;
   
   // Calculate scaling (fit full character)
   const imgRatio = img.width / img.height;
@@ -2483,6 +2496,7 @@ function saveSketchStoryboard() {
   canvas.width = 1600;
   canvas.height = 600; // Reduced from 700 to remove bottom gap
   const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
   
   // Cream paper background
   ctx.fillStyle = '#f8f6f1';
@@ -3197,6 +3211,78 @@ async function renderPrevizVideo() {
   stream.getTracks().forEach(track => track.stop());
 }
 
+
+/**
+ * CORE RENDERING ENGINE: renderFrames
+ * Calculates lens perspective, movement intensity, and composites the final frames.
+ */
+window.renderFrames = function() {
+  if (!S.heroImage) return;
+  
+  S.transformedStartFrame = null;
+  S.transformedEndFrame = null;
+  
+  const startCanvas = document.getElementById('startCanvas');
+  const endCanvas = document.getElementById('endCanvas');
+  const movementConfig = MOVEMENT_CONFIG[S.movement] || { type: 'linear' };
+  const sliderValue = S.movementIntensity;
+  
+  let intensity;
+  if (movementConfig.type === 'bidirectional') {
+    intensity = (sliderValue - 50) / 50; 
+  } else {
+    intensity = sliderValue / 100; 
+  }
+
+  // Common rendering settings
+  const renderSettings = {
+    lens: S.lens,
+    angle: S.angle,
+    lighting: S.lighting,
+    dof: S.dof,
+    haze: S.hazeAmount
+  };
+
+  // Start Frame: Always 1:1 base
+  if (startCanvas) applyEffect(startCanvas, S.heroImage, { ...renderSettings, frameType: 'start' });
+
+  // End Frame: Apply Kinetic movement
+  if (endCanvas) {
+    const endSettings = { ...renderSettings, frameType: 'end' };
+    
+    // Apply movement-specific transforms
+    switch(S.movement) {
+      case 'Dolly Push In':
+        endSettings.bgScale = 1.0 + (0.15 * intensity); 
+        endSettings.charScale = 1.0 + (0.40 * intensity);
+        break;
+      case 'Dolly Pull Out':
+        endSettings.bgScale = 1.0 - (0.25 * intensity);
+        endSettings.charScale = 1.0 - (0.45 * intensity); 
+        break;
+      case 'Pan Left/Right':
+        endSettings.bgPanOffset = 0.15 * intensity;
+        break;
+      case 'Tilt Up/Down':
+        endSettings.bgTiltOffset = 0.15 * intensity;
+        break;
+      case 'Zoom In':
+        endSettings.bgScale = 1.0 + (0.50 * intensity);
+        endSettings.charScale = 1.0 + (0.50 * intensity);
+        break;
+      case 'Dolly Zoom':
+        endSettings.bgScale = 1.0 + (0.60 * intensity);
+        endSettings.charScale = 1.0; 
+        break;
+      case 'Dutch Roll':
+        endSettings.dutchAngle = 15 * intensity;
+        break;
+    }
+    
+    applyEffect(endCanvas, S.heroImage, endSettings);
+  }
+};
+
 /**
  * Utility to map DOF strings to numeric blur radius
  */
@@ -3212,4 +3298,8 @@ function getBlurAmount(dof) {
   };
   return blurs[dof] || 0;
 }
+
+// EXPOSURE FOR UI
+window.renderPrevizVideo = renderPrevizVideo;
+
 
