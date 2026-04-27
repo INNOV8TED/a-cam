@@ -1,30 +1,30 @@
 const crypto = require('crypto');
 
 export const config = {
-  api: {
-    bodyParser: false,
-  },
+    api: {
+        bodyParser: false,
+    },
 };
 
-async function getRawBody(readable) {
-  const chunks = [];
-  for await (const chunk of readable) {
-    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
-  }
-  return Buffer.concat(chunks).toString('utf8');
+// Standard Node.js stream reader (more reliable than for-await on some Vercel versions)
+function getRawBody(req) {
+    return new Promise((resolve, reject) => {
+        let bodyChunks = [];
+        req.on('error', (err) => reject(err));
+        req.on('data', (chunk) => bodyChunks.push(chunk));
+        req.on('end', () => {
+            const rawBody = Buffer.concat(bodyChunks).toString('utf8');
+            resolve(rawBody);
+        });
+    });
 }
 
 function verifyPaddleSignature(signature, rawBody, secret) {
     if (!signature || !secret) return false;
 
     const parts = signature.split(';');
-    const timestampPart = parts.find(p => p.startsWith('t='));
-    const hashPart = parts.find(p => p.startsWith('h='));
-
-    if (!timestampPart || !hashPart) return false;
-
-    const timestamp = timestampPart.split('=')[1];
-    const receivedHash = hashPart.split('=')[1];
+    const timestamp = parts.find(p => p.startsWith('t=')).split('=')[1];
+    const receivedHash = parts.find(p => p.startsWith('h=')).split('=')[1];
 
     const signedPayload = `${timestamp}:${rawBody}`;
     const expectedHash = crypto
@@ -32,43 +32,41 @@ function verifyPaddleSignature(signature, rawBody, secret) {
         .update(signedPayload)
         .digest('hex');
 
-    // LOGGING FOR DEBUGGING
-    console.log(`[SECURITY_DEBUG] Received Hash: ${receivedHash.substring(0, 8)}...`);
-    console.log(`[SECURITY_DEBUG] Expected Hash: ${expectedHash.substring(0, 8)}...`);
-    console.log(`[SECURITY_DEBUG] Payload Length: ${rawBody.length}`);
-
-    try {
-        return crypto.timingSafeEqual(Buffer.from(receivedHash), Buffer.from(expectedHash));
-    } catch (e) {
-        return false;
-    }
+    return crypto.timingSafeEqual(Buffer.from(receivedHash), Buffer.from(expectedHash));
 }
 
 module.exports = async (req, res) => {
-    if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
-
-    const signature = req.headers['paddle-signature'];
-    const webhookSecret = process.env.PADDLE_WEBHOOK_SECRET;
-
-    if (!webhookSecret) {
-        console.error('[CONFIG] PADDLE_WEBHOOK_SECRET IS MISSING IN VERCEL ENV');
-        return res.status(500).send('Config Error');
+    // 1. Respond to GET (Browser tests)
+    if (req.method === 'GET') {
+        return res.status(200).send('◈ IN-NO-V8 Webhook Listener Active (Accepts POST only)');
     }
 
-    try {
-        const rawBody = await getRawBody(req);
+    if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
 
+    try {
+        // 2. Capture Raw Body with a 5-second timeout safeguard
+        const rawBody = await Promise.race([
+            getRawBody(req),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout reading body')), 5000))
+        ]);
+
+        const signature = req.headers['paddle-signature'];
+        const webhookSecret = process.env.PADDLE_WEBHOOK_SECRET;
+
+        // 3. Signature Verification
         if (!verifyPaddleSignature(signature, rawBody, webhookSecret)) {
-            console.warn('[SECURITY] Invalid Paddle Signature');
+            console.warn('[SECURITY] Invalid Signature');
             return res.status(401).send('Unauthorized');
         }
 
+        // 4. Success logic
         const event = JSON.parse(rawBody);
-        console.log(`[PADDLE] SUCCESS: Received ${event.event_type}`);
+        console.log(`[PADDLE] Received: ${event.event_type}`);
+        
+        return res.status(200).send('Webhook Received');
 
-        return res.status(200).send('OK');
     } catch (err) {
         console.error('[ERROR]', err.message);
-        return res.status(500).send('Error');
+        return res.status(500).send('Error Processing Webhook');
     }
 };
