@@ -368,13 +368,17 @@ a{color:inherit;text-decoration:none}
 
 <script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
 <script type="text/javascript">
+  // PADDLE v2 — token from: Paddle Dashboard > Developer Tools > Authentication
+  // NOTE: Verify this is the FULL token — paste directly from dashboard, do not truncate
   Paddle.Initialize({ 
-    token: 'live_c799a07625c3e3b6d499a9b118c' 
+    token: 'live_fd993851d85643f30e473f90f8b'
+    // 'seller' is Paddle v1 syntax — removed. Token alone identifies the seller in v2.
   });
 
   document.querySelectorAll('.paddle_button').forEach(button => {
     button.addEventListener('click', function() {
       const priceId = this.getAttribute('data-price-id');
+      // Price ID must exist in Paddle Dashboard > Catalog > Products (Production, not Sandbox)
       Paddle.Checkout.open({
         items: [{ priceId: priceId, quantity: 1 }]
       });
