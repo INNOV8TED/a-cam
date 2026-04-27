@@ -1,7 +1,9 @@
 {
-  "functions": {
-    "api/generate-pose.js": {
-      "maxDuration": 30
+  "version": 2,
+  "rewrites": [
+    {
+      "source": "/api/webhooks/paddle",
+      "destination": "/api/webhooks/paddle.js"
     }
-  }
+  ]
 }
