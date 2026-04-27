@@ -1,0 +1,180 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// ANTIGRAVITY PRODUCTION BRIDGE (V7 - THE FINAL STABLE BUILD)
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function fetchWithProxy(url, options = {}) {
+    const PROXY_URL = 'http://127.0.0.1:8001';
+    try {
+        const headers = { ...options.headers };
+        if (url.includes('generativelanguage.googleapis.com')) {
+            delete headers['Authorization'];
+        }
+
+        // 🌉 PROXY BRIDGE: Required for local browser tools to talk to Google
+        const proxyOptions = { ...options, headers: { ...headers, 'x-proxy-url': url } };
+        const response = await fetch(PROXY_URL, proxyOptions);
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`❌ GCP Target Error (${response.status}):`, errorText);
+            throw new Error(`GCP_${response.status}`);
+        }
+        return response;
+    } catch (e) {
+        console.error(`Connection Error: ${e.message}. Is your cors_bridge.py running?`);
+        throw e;
+    }
+}
+
+window.Antigravity = {
+    log: function (msg, type = '') {
+        const consoleEl = document.getElementById('productionConsole');
+        if (!consoleEl) return;
+        const line = document.createElement('div');
+        line.className = 'console-line' + (type ? ' ' + type : '');
+        line.textContent = `> ${msg}`;
+        consoleEl.appendChild(line);
+        consoleEl.scrollTop = consoleEl.scrollHeight;
+    },
+
+    toggleGcpConfig: function(e) {
+        if (e) e.stopPropagation();
+        const panel = document.getElementById('gcpConfigPanel');
+        if (!panel) return;
+        const isVisible = panel.style.display === 'flex';
+        panel.style.display = isVisible ? 'none' : 'flex';
+    },
+
+    pushToProduction: async function () {
+        const engineName = "Veo";
+        this.log(`INITIATING PRODUCTION HANDSHAKE...`, "reasoning");
+        
+        const cleanPid = "940583187251"; 
+        const activeRegion = document.getElementById('gcpRegion')?.value || "us-central1";
+        const modelId = "veo-3.1-generate-001";
+        
+        // Use predictLongRunning for video
+        const endpoint = `https://${activeRegion}-aiplatform.googleapis.com/v1/projects/${cleanPid}/locations/${activeRegion}/publishers/google/models/${modelId}:predictLongRunning`;
+
+        let rawToken = document.getElementById('gcpAccessToken')?.value?.trim() || "";
+        if (!rawToken) {
+            this.log("ERROR: NO ACCESS TOKEN. Check config!", "error");
+            return;
+        }
+        const token = rawToken.startsWith("Bearer ") ? rawToken : `Bearer ${rawToken}`;
+
+        showRenderProgress(engineName);
+
+        try {
+            const payload = {
+                instances: [{
+                    prompt: document.getElementById('promptBox')?.textContent || "Cinematic video",
+                    image: { mimeType: "image/jpeg", bytesBase64Encoded: S.heroImage?.split(',')[1] }
+                }],
+                parameters: { sampleCount: 1, aspectRatio: "16:9", fps: 24, durationSeconds: 5 }
+            };
+
+            const response = await fetchWithProxy(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': token },
+                body: JSON.stringify(payload)
+            });
+
+            const result = await response.json();
+            if (result.name) {
+                console.log("🛠️ Vertex AI Operation ID:", result.name);
+                await pollVertexOperation(engineName, result.name, token, activeRegion);
+            }
+        } catch (err) {
+            console.error("❌ Render Error:", err);
+            hideRenderProgress();
+        }
+    }
+};
+
+async function pollVertexOperation(engineName, operationName, token, region) {
+    const startTime = Date.now();
+    const cleanOpId = operationName.split('/').pop();
+    const pollUrl = `https://${region}-aiplatform.googleapis.com/v1beta1/${operationName}`;
+    
+    const check = async () => {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        updateRenderProgressUI(engineName, elapsed);
+        try {
+            const response = await fetchWithProxy(pollUrl, { 
+                method: 'GET', 
+                headers: { 'Authorization': token } 
+            });
+            const data = await response.json();
+            if (data.done) {
+                if (data.response?.video?.uri) handleRenderSuccess(data.response.video.uri);
+                else if (data.error) console.error("Bake Error:", data.error.message);
+            } else {
+                const status = document.getElementById('renderProgressStatus');
+                if (status) status.textContent = `BAKING CINEMATOGRAPHY... ${data.metadata?.progressPercent || 0}%`;
+                setTimeout(check, 5000);
+            }
+        } catch (e) { setTimeout(check, 8000); }
+    };
+    check();
+}
+
+function showRenderProgress(engineName) {
+    document.getElementById('renderProgressOverlay')?.remove();
+    const overlay = document.createElement('div');
+    overlay.id = 'renderProgressOverlay';
+    overlay.innerHTML = `<div class="render-progress-box">
+        <div class="render-progress-title">PRODUCTION BAKE: ${engineName}</div>
+        <div class="render-progress-track"><div id="renderProgressBar" class="render-progress-fill"></div></div>
+        <div id="renderProgressStatus" class="render-progress-status">SYNCING WITH GOOGLE...</div>
+        <div id="renderProgressTime" class="render-progress-time">0:00 ELAPSED</div>
+    </div>`;
+    document.body.appendChild(overlay);
+}
+
+function updateRenderProgressUI(name, elapsed) {
+    const bar = document.getElementById('renderProgressBar');
+    const time = document.getElementById('renderProgressTime');
+    if (bar) bar.style.width = `${Math.min((elapsed / 60) * 100, 98)}%`;
+    if (time) time.textContent = `${Math.floor(elapsed / 60)}:${(elapsed % 60).toString().padStart(2, '0')} ELAPSED`;
+}
+
+function handleRenderSuccess(url) {
+    hideRenderProgress();
+    const video = document.getElementById('resultVideo');
+    if (video) { video.src = url; document.getElementById('productionResultOverlay').classList.add('active'); }
+}
+
+function hideRenderProgress() { document.getElementById('renderProgressOverlay')?.remove(); }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// VISION HANDLERS (STABLE)
+// ═══════════════════════════════════════════════════════════════════════════
+
+window.toggleGcpConfig = function(e) { Antigravity.toggleGcpConfig(e); };
+window.pushToProduction = function() { Antigravity.pushToProduction(); };
+
+window.analyzeBackgroundVision = async function(b64) {
+    const key = document.getElementById('acam_gemini_key')?.value || localStorage.getItem('acam_gemini_key');
+    // Using stable Gemini 1.5 Flash
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`;
+    try {
+        const payload = { contents: [{ parts: [{ text: "Analyze background. JSON: description, foreground, midground, background." }, { inlineData: { mimeType: "image/jpeg", data: b64.split(',')[1] } }] }] };
+        const res = await fetchWithProxy(url, { method: 'POST', body: JSON.stringify(payload) });
+        const data = await res.json();
+        const text = data.candidates[0].content.parts[0].text;
+        return JSON.parse(text.replace(/```json|```/g, '').trim());
+    } catch (e) { return null; }
+};
+
+window.analyzeImageVertexAI = async function(b64) { 
+    const key = document.getElementById('acam_gemini_key')?.value || localStorage.getItem('acam_gemini_key');
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`;
+    try {
+        const payload = { contents: [{ parts: [{ text: "Analyze character outfit. JSON: outfit, description." }, { inlineData: { mimeType: "image/jpeg", data: b64.split(',')[1] } }] }] };
+        const res = await fetchWithProxy(url, { method: 'POST', body: JSON.stringify(payload) });
+        const data = await res.json();
+        const text = data.candidates[0].content.parts[0].text;
+        return JSON.parse(text.replace(/```json|```/g, '').trim());
+    } catch (e) { return { outfit: "Cinematic attire.", description: "Subject in atmosphere." }; }
+};

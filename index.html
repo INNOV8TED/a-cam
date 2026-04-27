@@ -16,11 +16,21 @@
 <meta name="twitter:title" content="A-CAM — Visual Director for AI Video">
 <meta name="twitter:description" content="Real-time storyboards, scene compositing, Gemini AI analysis.">
 <meta name="twitter:image" content="https://a-cam.in-no-v8.com/og-image.png">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%230a0a0a'/><text x='50' y='68' text-anchor='middle' font-size='60' fill='%23cc3333'>▶</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%230a0a0a'/><text x='50' y='68' text-anchor='middle' font-size='60' fill='%230b13f4'>▶</text></svg>">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@100;300;400;700;800&family=Montserrat:wght@400;700;800;900&family=Space+Grotesk:wght@300;400;700&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-:root{--bg:#08080a;--text:#c8c4bc;--accent:#c33;--dim:#555;--success:#2a9d4a}
+:root{--bg:#08080a;--text:#c8c4bc;--accent:#0b13f4;--dim:#555;--success:#2a9d4a}
+.glass {
+  background: rgba(255, 255, 255, 0.02);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+.neon-glow {
+  box-shadow: 0 0 20px rgba(11, 19, 244, 0.3);
+}
+
 body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace;overflow-x:hidden}
 a{color:inherit;text-decoration:none}
 
@@ -142,17 +152,17 @@ a{color:inherit;text-decoration:none}
   <div class="preview-title">See your shot before you render</div>
   <p class="preview-desc">A-CAM generates real-time storyboard previews using edge-detection sketch rendering. Upload a background plate to see your character composited into the scene.</p>
   <div class="preview-grid">
-    <div class="preview-card">
+    <div class="preview-card glass">
       <div class="preview-card-icon">✏️</div>
       <h4>Director's Sketch</h4>
       <p>Edge-detection rendering converts your subject into a professional storyboard sketch. Studio backgrounds are automatically suppressed.</p>
     </div>
-    <div class="preview-card">
+    <div class="preview-card glass">
       <div class="preview-card-icon">🎬</div>
       <h4>Scene Compositing</h4>
       <p>Upload a background plate to preview your character in the scene. DOF blur automatically applied based on aperture setting.</p>
     </div>
-    <div class="preview-card">
+    <div class="preview-card glass">
       <div class="preview-card-icon">▶</div>
       <h4>Movement Preview</h4>
       <p>Start and End frames show the actual camera movement — dolly push-in, crane up, orbital arc — with proper parallax.</p>
@@ -166,37 +176,37 @@ a{color:inherit;text-decoration:none}
   <div class="section-label">▶ Features</div>
   <h2 class="section-title">Think like a cinematographer</h2>
   <div class="feature-grid">
-    <div class="feature">
+    <div class="feature glass">
       <div class="feature-icon">✦</div>
       <h3>Gemini AI Analysis <span class="feature-new">NEW</span></h3>
       <p>Upload your character and let Gemini analyze the subject, suppress the studio background, and generate optimized prompts for your target scene.</p>
     </div>
-    <div class="feature">
+    <div class="feature glass">
       <div class="feature-icon">🎬</div>
       <h3>Scene Compositing <span class="feature-new">NEW</span></h3>
       <p>Upload a background plate and see your character composited in real-time. Depth of field blur applied to background based on aperture.</p>
     </div>
-    <div class="feature">
+    <div class="feature glass">
       <div class="feature-icon">◎</div>
       <h3>Lens Profiles <span class="feature-new">UPGRADED</span></h3>
       <p>8mm Fisheye to 135mm telephoto, including Anamorphic cinema lenses. Barrel distortion, oval bokeh, horizontal lens flares — all rendered in preview.</p>
     </div>
-    <div class="feature">
+    <div class="feature glass">
       <div class="feature-icon">⬡</div>
       <h3>Shot Angles</h3>
       <p>Eye level, low angle, high angle, dutch tilt, bird's eye, worm's eye. Each carries mood and power dynamics metadata.</p>
     </div>
-    <div class="feature">
+    <div class="feature glass">
       <div class="feature-icon">▶</div>
       <h3>Camera Movements <span class="feature-new">UPGRADED</span></h3>
       <p>Dolly, pan, tilt, orbital, crane, Snorricam body-cam, Dutch Roll with skew. Start/End frames show movement with parallax.</p>
     </div>
-    <div class="feature">
+    <div class="feature glass">
       <div class="feature-icon">🌫️</div>
       <h3>Atmospheric Haze <span class="feature-new">NEW</span></h3>
       <p>Z-depth fog control from clear to dense. Warm smoke, cool mist, neutral fog presets. Distance increases haze for pull-out shots.</p>
     </div>
-    <div class="feature">
+    <div class="feature glass">
       <div class="feature-icon">◈</div>
       <h3>Depth of Field</h3>
       <p>f/1.4 razor-thin focus to f/11 deep focus. Aperture affects background blur in composite preview and bokeh keywords in prompt.</p>
@@ -210,23 +220,23 @@ a{color:inherit;text-decoration:none}
   <div class="section-label">▶ Workflow</div>
   <h2 class="section-title">From image to video prompt</h2>
   <div class="workflow-steps">
-    <div class="workflow-step">
+    <div class="workflow-step glass">
       <div class="step-num">1</div>
       <div class="step-title">Upload</div>
       <div class="step-desc">Drop your hero image — character art, product shot, any subject on a studio background.</div>
     </div>
-    <div class="workflow-step">
+    <div class="workflow-step glass">
       <div class="step-ai">AI</div>
       <div class="step-num">2</div>
       <div class="step-title">Analyze</div>
       <div class="step-desc">Gemini analyzes your subject, suppresses the studio background, and prepares the scene description.</div>
     </div>
-    <div class="workflow-step">
+    <div class="workflow-step glass">
       <div class="step-num">3</div>
       <div class="step-title">Direct</div>
       <div class="step-desc">Choose lens, angle, movement. Upload a background plate to composite your character into the scene.</div>
     </div>
-    <div class="workflow-step">
+    <div class="workflow-step glass">
       <div class="step-num">4</div>
       <div class="step-title">Export</div>
       <div class="step-desc">Copy the technical prompt optimized for your target video model, or save the storyboard.</div>
@@ -250,11 +260,110 @@ a{color:inherit;text-decoration:none}
 
 <div class="divider"></div>
 
+<!-- PRICING & LICENSES -->
+<section class="pricing" id="pricing">
+  <div class="section-label">▶ Licenses</div>
+  <h2 class="section-title">Professional pre-viz for every scale</h2>
+  <div class="pricing-grid">
+    <!-- CREATOR -->
+    <div class="pricing-card glass">
+      <div class="price-tier">Creator</div>
+      <div class="price-value">£0<span>/forever</span></div>
+      <ul class="price-features">
+        <li>▶ Standard 16:9 Ratio</li>
+        <li>▶ 6 Basic Lenses</li>
+        <li>▶ Storyboard Export</li>
+        <li>▶ Community Support</li>
+      </ul>
+      <a href="app.html" class="btn-secondary" style="width:100%; text-align:center">Start Free</a>
+    </div>
+
+    <!-- PROFESSIONAL -->
+    <div class="pricing-card glass neon-glow" style="border-color: var(--accent)">
+      <div class="price-tier" style="color: var(--accent)">Professional</div>
+      <div class="price-value">£14.99<span>/one-time</span></div>
+      <ul class="price-features">
+        <li>▶ All 10 Lens Profiles</li>
+        <li>▶ Custom Aspect Ratios</li>
+        <li>▶ Advanced Scene Compositing</li>
+        <li>▶ Priority AI Analysis</li>
+      </ul>
+      <a href="#" class="btn-primary" style="width:100%; text-align:center">Buy License</a>
+      <p class="mor-disclosure">Our order process is conducted by our online reseller Paddle.com. Paddle.com is the Merchant of Record for all our orders.</p>
+    </div>
+
+    <!-- STUDIO -->
+    <div class="pricing-card glass">
+      <div class="price-tier">Studio / Enterprise</div>
+      <div class="price-value">Contact</div>
+      <ul class="price-features">
+        <li>▶ Multi-seat Licensing</li>
+        <li>▶ Custom Lens Calibration</li>
+        <li>▶ Dedicated GPU Priority</li>
+        <li>▶ 24/7 Studio Support</li>
+      </ul>
+      <a href="mailto:studio@in-no-v8.com" class="btn-secondary" style="width:100%; text-align:center">Request Quote</a>
+    </div>
+  </div>
+</section>
+
+<style>
+.pricing{padding:100px 40px;max-width:1100px;margin:0 auto;text-align:center}
+.pricing-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-top:40px}
+.pricing-card{padding:40px;text-align:left;display:flex;flex-direction:column;transition:transform 0.3s ease}
+.pricing-card:hover{transform:translateY(-10px)}
+.price-tier{font-size:10px;letter-spacing:3px;text-transform:uppercase;margin-bottom:12px;font-weight:800;color:var(--dim)}
+.price-value{font-family:'Montserrat',sans-serif;font-weight:900;font-size:36px;color:#e8e4dc;margin-bottom:30px}
+.price-value span{font-size:12px;color:var(--dim);font-weight:400;margin-left:4px}
+.price-features{list-style:none;margin-bottom:40px;flex:1}
+.price-features li{font-size:10px;color:var(--dim);margin-bottom:12px;letter-spacing:0.5px}
+.mor-disclosure{font-size:8px;color:#333;margin-top:16px;line-height:1.4;letter-spacing:0}
+@media(max-width:768px){
+  .pricing-grid{grid-template-columns:1fr;gap:20px}
+}
+</style>
+
+<div class="divider"></div>
+
 <footer class="footer">
-  <p style="margin-bottom:8px">▶ A-CAM by <a href="https://www.in-no-v8.com">in-no-v8</a></p>
-  <p style="margin-bottom:12px">Part of the IN-NO-V8 Creative Suite</p>
-  <p style="color:#333;font-size:7px;max-width:600px;margin:0 auto;line-height:1.8">A-CAM generates storyboard previews and text prompts. Video generation requires separate access to the target AI video platforms. Scene compositing is for visualization only — final video rendering happens in your chosen AI platform.</p>
+  <div class="footer-content" style="max-width:1100px; margin:0 auto; display:grid; grid-template-columns:1fr 2fr; gap:40px; text-align:left">
+    <div class="footer-brand">
+      <p style="margin-bottom:8px; font-weight:900; color:#e8e4dc; font-size:14px">A-CAM <span>▶</span></p>
+      <p style="margin-bottom:12px">Cinematic pre-visualization for the AI era.</p>
+      <p style="color:#333">A product of <a href="https://www.in-no-v8.com" style="color:var(--accent)">IN-NO-V8</a></p>
+    </div>
+    <div class="footer-links" style="display:grid; grid-template-columns:repeat(3,1fr); gap:20px">
+      <div class="link-group">
+        <h5 style="color:#666; text-transform:uppercase; font-size:8px; letter-spacing:2px; margin-bottom:12px">Product</h5>
+        <ul style="list-style:none; font-size:9px">
+          <li style="margin-bottom:8px"><a href="app.html">Launch App</a></li>
+          <li style="margin-bottom:8px"><a href="#workflow">Workflow</a></li>
+          <li style="margin-bottom:8px"><a href="#pricing">Pricing</a></li>
+        </ul>
+      </div>
+      <div class="link-group">
+        <h5 style="color:#666; text-transform:uppercase; font-size:8px; letter-spacing:2px; margin-bottom:12px">Company</h5>
+        <ul style="list-style:none; font-size:9px">
+          <li style="margin-bottom:8px"><a href="https://in-no-v8.com">Studio</a></li>
+          <li style="margin-bottom:8px"><a href="mailto:hello@in-no-v8.com">Contact</a></li>
+        </ul>
+      </div>
+      <div class="link-group">
+        <h5 style="color:#666; text-transform:uppercase; font-size:8px; letter-spacing:2px; margin-bottom:12px">Legal</h5>
+        <ul style="list-style:none; font-size:9px">
+          <li style="margin-bottom:8px"><a href="legal/privacy.html">Privacy Policy</a></li>
+          <li style="margin-bottom:8px"><a href="legal/terms.html">Terms of Service</a></li>
+          <li style="margin-bottom:8px"><a href="legal/refund.html">Refund Policy</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="footer-bottom" style="margin-top:60px; padding-top:20px; border-top:1px solid #111; color:#333; font-size:8px; display:flex; justify-content:space-between; align-items:center">
+    <p>© 2026 IN-NO-V8. All rights reserved.</p>
+    <p>Handcrafted in the future.</p>
+  </div>
 </footer>
+
 
 <script data-goatcounter="https://innov8.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 </body>

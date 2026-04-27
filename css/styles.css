@@ -144,7 +144,21 @@
 }
 
 *{margin:0;padding:0;box-sizing:border-box}
-:root{--accent:#c33;--bg:#08080a;--panel:#0e0e10;--card:#131315;--border:#1e1e20;--text:#c8c4bc;--dim:#555;--success:#2a9d4a}
+:root{--accent:#0b13f4;--bg:#08080a;--panel:#0e0e10;--card:#131315;--border:#1e1e20;--text:#c8c4bc;--dim:#555;--success:#2a9d4a}
+.glass {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+.neon-glow {
+    box-shadow: 0 0 15px rgba(11, 19, 244, 0.4);
+}
+.neon-text {
+    text-shadow: 0 0 8px rgba(11, 19, 244, 0.8);
+}
+
 body{font-family:'JetBrains Mono','SF Mono',monospace;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden;font-size:11px}
 
 /* HEADER */

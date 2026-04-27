@@ -1,0 +1,127 @@
+import http.server
+import socketserver
+import urllib.request
+import urllib.parse
+import json
+import os
+import ssl
+import sys
+import threading
+
+# Use port 8001 to avoid conflict with the app dev server (usually 3000)
+PORT = 8001
+
+class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
+    def end_headers(self):
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, x-proxy-url, Authorization')
+        super().end_headers()
+
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.end_headers()
+
+    def do_POST(self):
+        self.proxy_request()
+
+    def do_GET(self):
+        # Serve local files if no x-proxy-url header
+        if not self.headers.get('x-proxy-url'):
+            super().do_GET()
+        else:
+            self.proxy_request()
+
+    def proxy_request(self):
+        target_url = self.headers.get('x-proxy-url')
+        thread_id = threading.current_thread().name
+        
+        if not target_url:
+            self.send_response(400)
+            self.end_headers()
+            self.wfile.write(b"Missing x-proxy-url header")
+            return
+
+        print(f"[{thread_id}] BRIDGE: {self.command} {self.path}")
+        print(f"[{thread_id}] BRIDGE: Target Header: {target_url}")
+
+        # --- PROTOCOL HARDENER (Intercepting Vertex AI Requests) ---
+        if "aiplatform.googleapis.com" in target_url:
+            print(f"[{thread_id}] [HARDENER] Intercepting Vertex Request...")
+            
+            # 🛡️ PIVOT: We NO LONGER force v1alpha. We allow v1 for Veo 3.1 stability.
+            # target_url = target_url.replace('/v1beta1/', '/v1alpha/').replace('/v1/', '/v1alpha/')
+            
+            # Resolve 401 (Auth) by stripping API Keys (forcing OAuth2/ADC)
+            parsed = urllib.parse.urlparse(target_url)
+            query = urllib.parse.parse_qs(parsed.query)
+            if 'key' in query:
+                print(f"[{thread_id}] [HARDENER] Stripped API Key from Vertex Request")
+                query.pop('key')
+            target_url = parsed._replace(query=urllib.parse.urlencode(query, doseq=True)).geturl()
+            
+            # 🛡️ FATAL PATH REPAIR: Fix corrupted Project IDs (doubling bug)
+            if "/projects/project-" in target_url:
+                parts = target_url.split('/projects/')
+                if len(parts) > 1:
+                    pid_segment = parts[1].split('/')[0]
+                    if pid_segment.count('project-') > 1:
+                        print(f"[{thread_id}] [HARDENER] CRITICAL: Detected corrupted path segment: {pid_segment}")
+                        clean_pid = pid_segment[pid_segment.rindex('project-'):]
+                        target_url = target_url.replace(pid_segment, clean_pid)
+                        print(f"[{thread_id}] [HARDENER] Path Repaired: {clean_pid}")
+
+            print(f"[{thread_id}] BRIDGE: Final Proxied URL: {target_url}")
+
+        # Proxy the request
+        try:
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length) if content_length > 0 else None
+
+            # Prepare headers for the target
+            headers = {k: v for k, v in self.headers.items() if k.lower() not in ['host', 'x-proxy-url', 'connection']}
+            
+            # Injection Layer: If no token provided by browser, attempt ADC
+# BUT skip for AI Studio (uses API keys, not OAuth)
+auth = headers.get('Authorization', '')
+if "generativelanguage.googleapis.com" not in target_url and (not auth or auth.lower() in ("bearer undefined", "bearer null", "bearer token")):
+                try:
+                    import subprocess
+                    token = subprocess.check_output("gcloud auth application-default print-access-token", shell=True).decode().strip()
+                    headers['Authorization'] = f"Bearer {token}"
+                    print(f"[{thread_id}] SUCCESS: ADC Layer Injected.")
+                except:
+                    pass
+
+            req = urllib.request.Request(target_url, data=body, headers=headers, method=self.command)
+            
+            with urllib.request.urlopen(req) as response:
+                self.send_response(response.getcode())
+                for k, v in response.getheaders():
+                    if k.lower() not in ['access-control-allow-origin', 'content-encoding', 'transfer-encoding']:
+                        self.send_header(k, v)
+                self.end_headers()
+                self.wfile.write(response.read())
+
+        except urllib.error.HTTPError as e:
+            print(f"[{thread_id}] Target error: {e.code} - {e.reason}")
+            self.send_response(e.code)
+            self.end_headers()
+            self.wfile.write(e.read())
+        except Exception as e:
+            print(f"[{thread_id}] Bridge error: {str(e)}")
+            self.send_response(500)
+            self.end_headers()
+            self.wfile.write(str(e).encode())
+
+class ThreadedHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
+    """Handle requests in a separate thread."""
+
+def run_server():
+    server_address = ('', PORT)
+    httpd = ThreadedHTTPServer(server_address, CORSProxyHandler)
+    print(f"BRIDGE: Synced on 127.0.0.1:{PORT}")
+    httpd.serve_forever()
+
+if __name__ == "__main__":
+    run_server()
